@@ -129,15 +129,6 @@ impl RequestLine {
     fn min_len() -> usize {
         Method::Get.raw().len() + 1 + Version::Http10.raw().len() + 2
     }
-
-    #[cfg(test)]
-    pub fn new(method: Method, uri: &str, http_version: Version) -> Self {
-        Self {
-            method,
-            uri: Uri::new(uri),
-            http_version,
-        }
-    }
 }
 
 /// Wrapper over an HTTP Request.
@@ -271,6 +262,16 @@ mod tests {
                 && self.headers.content_length() == other.headers.content_length()
                 && self.headers.expect() == other.headers.expect()
                 && self.headers.chunked() == other.headers.chunked()
+        }
+    }
+
+    impl RequestLine {
+        pub fn new(method: Method, uri: &str, http_version: Version) -> Self {
+            Self {
+                method,
+                uri: Uri::new(uri),
+                http_version,
+            }
         }
     }
 
