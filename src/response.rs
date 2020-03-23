@@ -92,8 +92,8 @@ impl ResponseHeaders {
         buf.write_all(Header::Server.raw())?;
         buf.write_all(&[COLON, SP])?;
         buf.write_all(self.server.as_bytes())?;
-
         buf.write_all(&[CR, LF])?;
+
         buf.write_all(b"Connection: keep-alive")?;
         buf.write_all(&[CR, LF])?;
 
