@@ -9,7 +9,7 @@ use crate::common::{Body, Method, Version};
 
 pub use crate::common::RequestError;
 
-/// Finds the first occurence of `sequence` in the `bytes` slice.
+/// Finds the first occurrence of `sequence` in the `bytes` slice.
 ///
 /// Returns the starting position of the `sequence` in `bytes` or `None` if the
 /// `sequence` is not found.
@@ -153,8 +153,6 @@ impl Request {
     ///     * Request Line: "GET SP Request-uri SP HTTP/1.0 CRLF" - Mandatory </br>
     ///     * Request Headers "<headers> CRLF"- Optional </br>
     ///     * Entity Body - Optional </br>
-    /// The request headers and the entity body is not parsed and None is returned because
-    /// these are not used by the MMDS server.
     /// The only supported method is GET and the HTTP protocol is expected to be HTTP/1.0
     /// or HTTP/1.1.
     ///
@@ -167,7 +165,7 @@ impl Request {
     /// extern crate micro_http;
     /// use micro_http::Request;
     ///
-    /// let http_request = Request::try_from(b"GET http://localhost/home HTTP/1.0\r\n");
+    /// let http_request = Request::try_from(b"GET http://localhost/home HTTP/1.0\r\n\r\n").unwrap();
     /// ```
     pub fn try_from(byte_stream: &[u8]) -> Result<Self, RequestError> {
         // The first line of the request is the Request Line. The line ending is CR LF.

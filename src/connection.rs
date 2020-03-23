@@ -114,7 +114,7 @@ impl<T: Read + Write> HttpConnection<T> {
         }
     }
 
-    // Reads a maximum of 1024 bytes from the stream into `buffer`.
+    // Reads a maximum of `BUFFER_SIZE` bytes from the stream into `buffer`.
     // The return value represents the end index of what we have just appended.
     fn read_bytes(&mut self) -> Result<usize, ConnectionError> {
         // Append new bytes to what we already have in the buffer.
