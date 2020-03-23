@@ -106,11 +106,12 @@ impl Headers {
                         Header::ContentLength => {
                             let try_numeric: Result<i32, std::num::ParseIntError> =
                                 std::str::FromStr::from_str(entry[1].trim());
-                            if let Ok(content_length) = try_numeric {
-                                self.content_length = content_length;
-                                Ok(())
-                            } else {
-                                Err(RequestError::InvalidHeader)
+                            match try_numeric {
+                                Ok(content_length) if content_length >= 0 => {
+                                    self.content_length = content_length;
+                                    Ok(())
+                                }
+                                _ => Err(RequestError::InvalidHeader),
                             }
                         }
                         Header::ContentType => {
@@ -304,6 +305,15 @@ mod tests {
             .unwrap()
             .content_length,
             55
+        );
+
+        // Valid headers.
+        assert_eq!(
+            Headers::try_from(
+                b"Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\nContent-Length: -55\r\n\r\n"
+            )
+            .unwrap_err(),
+            RequestError::InvalidHeader
         );
 
         let bytes: [u8; 10] = [130, 140, 150, 130, 140, 150, 130, 140, 150, 160];
