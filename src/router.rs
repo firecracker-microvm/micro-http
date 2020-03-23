@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::hash_map::HashMap;
+use std::collections::hash_map::{Entry, HashMap};
 
-use crate::{MediaType, Request, Response, StatusCode, Version};
+use crate::{MediaType, Method, Request, Response, StatusCode, Version};
 
 pub use crate::common::RouteError;
 
@@ -35,24 +35,62 @@ impl<T: Send> HttpRoutes<T> {
         }
     }
 
-    /// Register a request handler for a path.
+    /// Register a request handler for a unique (HTTP_METHOD, HTTP_PATH) tuple.
+    ///
+    /// # Arguments
+    /// * `method`: HTTP method to assoicate with the handler.
+    /// * `path`: HTTP path to associate with the handler.
+    /// * `handler`: HTTP request handler for the (method, path) tuple.
     pub fn add_route(
         &mut self,
+        method: Method,
         path: String,
         handler: Box<dyn EndpointHandler<T> + Sync + Send>,
     ) -> Result<(), RouteError> {
-        let full = format!("{}{}", self.prefix, path);
-        if self.routes.contains_key(&full) {
-            Err(RouteError::HandlerExist(full))
-        } else {
-            self.routes.insert(full, handler);
-            Ok(())
+        let full_path = format!("{}:{}{}", method.to_str(), self.prefix, path);
+        match self.routes.entry(full_path.clone()) {
+            Entry::Occupied(_) => Err(RouteError::HandlerExist(full_path)),
+            Entry::Vacant(entry) => {
+                entry.insert(handler);
+                Ok(())
+            }
         }
     }
 
     /// Handle an incoming http request and generate corresponding response.
-    pub fn handle_http_request(&self, request: &Request, argument: T) -> Response {
-        let path = request.uri().get_abs_path().to_string();
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// extern crate micro_http;
+    /// use micro_http::{
+    ///     EndpointHandler, HttpRoutes, Method, StatusCode, Request, Response, Version
+    /// };
+    ///
+    /// struct HandlerArg(bool);
+    /// struct MockHandler {}
+    /// impl EndpointHandler<HandlerArg> for MockHandler {
+    ///     fn handle_request(&self, _req: &Request, _arg: &HandlerArg) -> Response {
+    ///         Response::new(Version::Http11, StatusCode::OK)
+    ///     }
+    /// }
+    ///
+    /// let mut router = HttpRoutes::new("Mock_Server".to_string(), "/api/v1".to_string());
+    /// let handler = MockHandler {};
+    /// router.add_route(Method::Get, "/func1".to_string(), Box::new(handler)).unwrap();
+    ///
+    /// let request =
+    ///     Request::try_from(b"GET http://localhost/api/v1/func1 HTTP/1.1\r\n\r\n").unwrap();
+    /// let arg = HandlerArg(true);
+    /// let reply = router.handle_http_request(&request, &arg);
+    /// assert_eq!(reply.status(), StatusCode::OK);
+    /// ```
+    pub fn handle_http_request(&self, request: &Request, argument: &T) -> Response {
+        let path = format!(
+            "{}:{}",
+            request.method().to_str(),
+            request.uri().get_abs_path()
+        );
         let mut response = match self.routes.get(&path) {
             Some(route) => route.handle_request(&request, &argument),
             None => Response::new(Version::Http11, StatusCode::NotFound),
@@ -82,19 +120,22 @@ mod tests {
     fn test_create_router() {
         let mut router = HttpRoutes::new("Mock_Server".to_string(), "/api/v1".to_string());
         let handler = MockHandler {};
-        let res = router.add_route("/func1".to_string(), Box::new(handler));
+        let res = router.add_route(Method::Get, "/func1".to_string(), Box::new(handler));
         assert!(res.is_ok());
-        let key = format!("{}{}", "/api/v1", "/func1");
-        assert!(router.routes.contains_key(&key));
+        assert!(router.routes.contains_key("GET:/api/v1/func1"));
 
         let handler = MockHandler {};
-        match router.add_route("/func1".to_string(), Box::new(handler)) {
+        match router.add_route(Method::Get, "/func1".to_string(), Box::new(handler)) {
             Err(RouteError::HandlerExist(_)) => {}
             _ => panic!("add_route() should return error for path with existing handler"),
         }
 
         let handler = MockHandler {};
-        let res = router.add_route("/func2".to_string(), Box::new(handler));
+        let res = router.add_route(Method::Put, "/func1".to_string(), Box::new(handler));
+        assert!(res.is_ok());
+
+        let handler = MockHandler {};
+        let res = router.add_route(Method::Get, "/func2".to_string(), Box::new(handler));
         assert!(res.is_ok());
     }
 
@@ -103,13 +144,13 @@ mod tests {
         let mut router = HttpRoutes::new("Mock_Server".to_string(), "/api/v1".to_string());
         let handler = MockHandler {};
         router
-            .add_route("/func1".to_string(), Box::new(handler))
+            .add_route(Method::Get, "/func1".to_string(), Box::new(handler))
             .unwrap();
 
         let request =
             Request::try_from(b"GET http://localhost/api/v1/func2 HTTP/1.1\r\n\r\n").unwrap();
         let arg = HandlerArg(true);
-        let reply = router.handle_http_request(&request, arg);
+        let reply = router.handle_http_request(&request, &arg);
         assert_eq!(reply.status(), StatusCode::NotFound);
     }
 }

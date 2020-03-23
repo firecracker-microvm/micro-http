@@ -177,6 +177,15 @@ impl Method {
             Method::Patch => b"PATCH",
         }
     }
+
+    /// Returns an &str corresponding to the Method.
+    pub fn to_str(self) -> &'static str {
+        match self {
+            Method::Get => "GET",
+            Method::Put => "PUT",
+            Method::Patch => "PATCH",
+        }
+    }
 }
 
 /// Supported HTTP Versions.
@@ -366,5 +375,17 @@ mod tests {
             ),
             "IO error: Resource temporarily unavailable (os error 11)"
         );
+    }
+
+    #[test]
+    fn test_method_to_str() {
+        let val = Method::Get;
+        assert_eq!(val.to_str(), "GET");
+
+        let val = Method::Put;
+        assert_eq!(val.to_str(), "PUT");
+
+        let val = Method::Patch;
+        assert_eq!(val.to_str(), "PATCH");
     }
 }
