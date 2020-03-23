@@ -3,29 +3,20 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::hash_map::HashMap;
 
 use crate::{MediaType, Request, Response, StatusCode, Version};
 
 pub use crate::common::RouteError;
 
-/// Trait to clone the argument for EndpointHandler::handle_request.
-pub trait TryClone
-where
-    Self: std::marker::Sized,
-{
-    /// Clone an object from a reference.
-    fn try_clone(&self) -> Option<Self>;
-}
-
 /// An HTTP endpoint handler interface
 pub trait EndpointHandler<T>: Sync + Send {
     /// Handles an HTTP request.
-    fn handle_request(&self, req: &Request, arg: T) -> Response;
+    fn handle_request(&self, req: &Request, arg: &T) -> Response;
 }
 
 /// An HTTP routes structure.
-pub struct HttpRoutes<T: TryClone> {
+pub struct HttpRoutes<T> {
     server_id: String,
     prefix: String,
     media_type: MediaType,
@@ -33,7 +24,7 @@ pub struct HttpRoutes<T: TryClone> {
     routes: HashMap<String, Box<dyn EndpointHandler<T> + Sync + Send>>,
 }
 
-impl<T: Send + TryClone> HttpRoutes<T> {
+impl<T: Send> HttpRoutes<T> {
     /// Create a http request router.
     pub fn new(server_id: String, prefix: String) -> Self {
         HttpRoutes {
@@ -60,13 +51,10 @@ impl<T: Send + TryClone> HttpRoutes<T> {
     }
 
     /// Handle an incoming http request and generate corresponding response.
-    pub fn handle_http_request(&self, request: &Request, argument: &T) -> Response {
+    pub fn handle_http_request(&self, request: &Request, argument: T) -> Response {
         let path = request.uri().get_abs_path().to_string();
         let mut response = match self.routes.get(&path) {
-            Some(route) => match argument.try_clone() {
-                Some(arg) => route.handle_request(&request, arg),
-                None => Response::new(Version::Http11, StatusCode::InternalServerError),
-            },
+            Some(route) => route.handle_request(&request, &argument),
             None => Response::new(Version::Http11, StatusCode::NotFound),
         };
 
@@ -82,19 +70,10 @@ mod tests {
 
     struct HandlerArg(bool);
 
-    impl TryClone for HandlerArg {
-        fn try_clone(&self) -> Option<Self> {
-            match self.0 {
-                true => Some(HandlerArg(true)),
-                false => None,
-            }
-        }
-    }
-
     struct MockHandler {}
 
     impl EndpointHandler<HandlerArg> for MockHandler {
-        fn handle_request(&self, _req: &Request, _arg: HandlerArg) -> Response {
+        fn handle_request(&self, _req: &Request, _arg: &HandlerArg) -> Response {
             Response::new(Version::Http11, StatusCode::OK)
         }
     }
@@ -130,13 +109,7 @@ mod tests {
         let request =
             Request::try_from(b"GET http://localhost/api/v1/func2 HTTP/1.1\r\n\r\n").unwrap();
         let arg = HandlerArg(true);
-        let reply = router.handle_http_request(&request, &arg);
+        let reply = router.handle_http_request(&request, arg);
         assert_eq!(reply.status(), StatusCode::NotFound);
-
-        let request =
-            Request::try_from(b"GET http://localhost/api/v1/func1 HTTP/1.1\r\n\r\n").unwrap();
-        let arg = HandlerArg(false);
-        let reply = router.handle_http_request(&request, &arg);
-        assert_eq!(reply.status(), StatusCode::InternalServerError);
     }
 }
