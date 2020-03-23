@@ -114,13 +114,10 @@ mod connection;
 mod request;
 mod response;
 mod server;
-use common::ascii;
-use common::headers;
 
-pub use connection::{ConnectionError, HttpConnection};
-pub use request::{Request, RequestError};
-pub use response::{Response, StatusCode};
-pub use server::{HttpServer, ServerError, ServerRequest, ServerResponse};
-
-pub use common::headers::{Headers, MediaType};
-pub use common::{Body, Method, Version};
+pub use self::common::headers::{Headers, MediaType};
+pub use self::common::{Body, Method, Version};
+pub use self::connection::{ConnectionError, HttpConnection};
+pub use self::request::{Request, RequestError};
+pub use self::response::{Response, StatusCode};
+pub use self::server::{HttpServer, ServerError, ServerRequest, ServerResponse};

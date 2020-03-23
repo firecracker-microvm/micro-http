@@ -3,16 +3,17 @@
 
 use std::str::from_utf8;
 
-use common::ascii::{CR, CRLF_LEN, LF, SP};
-pub use common::RequestError;
-use common::{Body, Method, Version};
-use headers::Headers;
+use crate::common::ascii::{CR, CRLF_LEN, LF, SP};
+use crate::common::headers::Headers;
+use crate::common::{Body, Method, Version};
+
+pub use crate::common::RequestError;
 
 /// Finds the first occurence of `sequence` in the `bytes` slice.
 ///
 /// Returns the starting position of the `sequence` in `bytes` or `None` if the
 /// `sequence` is not found.
-pub fn find(bytes: &[u8], sequence: &[u8]) -> Option<usize> {
+pub(crate) fn find(bytes: &[u8], sequence: &[u8]) -> Option<usize> {
     bytes
         .windows(sequence.len())
         .position(|window| window == sequence)
@@ -135,7 +136,6 @@ impl RequestLine {
 }
 
 /// Wrapper over an HTTP Request.
-#[allow(unused)]
 #[derive(Debug)]
 pub struct Request {
     /// The request line of the request.

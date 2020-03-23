@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 extern crate epoll;
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
-use common::{Body, Version};
-pub use common::{ConnectionError, RequestError, ServerError};
-use connection::HttpConnection;
-use request::Request;
-use response::{Response, StatusCode};
-use std::collections::HashMap;
+use crate::common::ConnectionError;
+use crate::common::{Body, Version};
+use crate::connection::HttpConnection;
+use crate::request::Request;
+use crate::response::{Response, StatusCode};
+
+pub use crate::common::ServerError;
 
 static SERVER_FULL_ERROR_MESSAGE: &[u8] = b"HTTP/1.1 503\r\n\
                                             Server: Firecracker API\r\n\
@@ -522,11 +524,10 @@ impl HttpServer {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
 
-    use common::Body;
-    use std::io::Read;
-    use std::io::Write;
+    use crate::common::Body;
 
     #[test]
     fn test_wait_one_connection() {
