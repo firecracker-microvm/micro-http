@@ -3,15 +3,14 @@
 
 use std::io::{Error as WriteError, Write};
 
-use ascii::{COLON, CR, LF, SP};
-use common::{Body, Version};
-use headers::{Header, MediaType};
+use crate::common::ascii::{COLON, CR, LF, SP};
+use crate::common::headers::{Header, MediaType};
+use crate::common::{Body, Version};
 
 /// Wrapper over a response status code.
 ///
 /// The status code is defined as specified in the
 /// [RFC](https://tools.ietf.org/html/rfc7231#section-6).
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StatusCode {
     /// 100, Continue
@@ -124,7 +123,6 @@ impl ResponseHeaders {
     }
 
     /// Sets the content type to be written in the HTTP response.
-    #[allow(unused)]
     pub fn set_content_type(&mut self, content_type: MediaType) {
         self.content_type = content_type;
     }

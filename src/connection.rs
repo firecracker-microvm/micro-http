@@ -4,17 +4,18 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 
-use common::ascii::{CR, CRLF_LEN, LF};
-use common::Body;
-pub use common::{ConnectionError, RequestError};
-use headers::Headers;
-use request::{find, Request, RequestLine};
-use response::{Response, StatusCode};
+use crate::common::ascii::{CR, CRLF_LEN, LF};
+use crate::common::headers::Headers;
+use crate::common::{Body, RequestError};
+use crate::request::{find, Request, RequestLine};
+use crate::response::{Response, StatusCode};
+
+pub use crate::common::ConnectionError;
 
 const BUFFER_SIZE: usize = 1024;
 
 /// Describes the state machine of an HTTP connection.
-pub enum ConnectionState {
+pub(crate) enum ConnectionState {
     WaitingForRequestLine,
     WaitingForHeaders,
     WaitingForBody,
@@ -389,7 +390,7 @@ impl<T: Read + Write> HttpConnection<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Method, Version};
+    use crate::common::{Method, Version};
     use std::os::unix::net::UnixStream;
 
     #[test]
