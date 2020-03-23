@@ -113,6 +113,7 @@ mod common;
 mod connection;
 mod request;
 mod response;
+mod router;
 mod server;
 
 pub use self::common::headers::{Headers, MediaType};
@@ -120,4 +121,5 @@ pub use self::common::{Body, Method, Version};
 pub use self::connection::{ConnectionError, HttpConnection};
 pub use self::request::{Request, RequestError};
 pub use self::response::{Response, StatusCode};
+pub use self::router::{EndpointHandler, HttpRoutes, RouteError, TryClone};
 pub use self::server::{HttpServer, ServerError, ServerRequest, ServerResponse};
