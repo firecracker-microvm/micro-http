@@ -121,5 +121,5 @@ pub use self::common::{Body, Method, Version};
 pub use self::connection::{ConnectionError, HttpConnection};
 pub use self::request::{Request, RequestError};
 pub use self::response::{Response, StatusCode};
-pub use self::router::{EndpointHandler, HttpRoutes, RouteError, TryClone};
+pub use self::router::{EndpointHandler, HttpRoutes, RouteError};
 pub use self::server::{HttpServer, ServerError, ServerRequest, ServerResponse};
