@@ -367,8 +367,16 @@ impl HttpServer {
         }
 
         // Remove dead connections.
-        self.connections
-            .retain(|_, client_connection| !client_connection.is_done());
+        let epoll_fd = self.epoll_fd;
+        self.connections.retain(|rawfd, client_connection| {
+            if client_connection.is_done() {
+                // The rawfd should have been registered to the epoll fd.
+                Self::epoll_del(epoll_fd, *rawfd).unwrap();
+                false
+            } else {
+                true
+            }
+        });
 
         Ok(parsed_requests)
     }
@@ -513,6 +521,17 @@ impl HttpServer {
         epoll::ctl(
             epoll_fd,
             epoll::ControlOptions::EPOLL_CTL_ADD,
+            stream_fd,
+            epoll::Event::new(epoll::Events::EPOLLIN, stream_fd as u64),
+        )
+        .map_err(ServerError::IOError)
+    }
+
+    /// Removes a stream to the `epoll` notification structure.
+    fn epoll_del(epoll_fd: RawFd, stream_fd: RawFd) -> Result<()> {
+        epoll::ctl(
+            epoll_fd,
+            epoll::ControlOptions::EPOLL_CTL_DEL,
             stream_fd,
             epoll::Event::new(epoll::Events::EPOLLIN, stream_fd as u64),
         )
