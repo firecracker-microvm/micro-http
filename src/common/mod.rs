@@ -67,6 +67,21 @@ impl Display for ConnectionError {
     }
 }
 
+/// Errors pertaining to `HttpRoute`.
+#[derive(Debug)]
+pub enum RouteError {
+    /// Handler for http routing path already exists.
+    HandlerExist(String),
+}
+
+impl Display for RouteError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            RouteError::HandlerExist(p) => write!(f, "handler for {} already exists", p),
+        }
+    }
+}
+
 /// Errors pertaining to `HttpServer`.
 #[derive(Debug)]
 pub enum ServerError {
