@@ -131,6 +131,7 @@ impl<T: Read + Write> HttpConnection<T> {
                 Err(e) => return Err(ConnectionError::StreamError(e)),
             }
         }
+        Ok(bytes_read + self.read_cursor)
     }
 
     /// Parses bytes in `buffer` for a valid request line.
