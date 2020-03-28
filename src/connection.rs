@@ -117,18 +117,16 @@ impl<T: Read + Write> HttpConnection<T> {
     // Reads a maximum of `BUFFER_SIZE` bytes from the stream into `buffer`.
     // The return value represents the end index of what we have just appended.
     fn read_bytes(&mut self) -> Result<usize, ConnectionError> {
-        // Append new bytes to what we already have in the buffer.
-        let bytes_read = self
-            .stream
-            .read(&mut self.buffer[self.read_cursor..])
-            .map_err(ConnectionError::StreamError)?;
-
-        // If the read returned 0 then the client has closed the connection.
-        if bytes_read == 0 {
-            return Err(ConnectionError::ConnectionClosed);
+        loop {
+            // Append new bytes to what we already have in the buffer.
+            match self.stream.read(&mut self.buffer[self.read_cursor..]) {
+                // If the read returned 0 then the client has closed the connection.
+                Ok(0) => return Err(ConnectionError::ConnectionClosed),
+                Ok(bytes_read) => return Ok(bytes_read + self.read_cursor),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(ConnectionError::StreamError(e)),
+            }
         }
-
-        Ok(bytes_read + self.read_cursor)
     }
 
     // Parses bytes in `buffer` for a valid request line.
@@ -324,9 +322,7 @@ impl<T: Read + Write> HttpConnection<T> {
         if let Some(response_buffer_vec) = self.response_buffer.as_mut() {
             let bytes_to_be_written = response_buffer_vec.len();
             match self.stream.write(response_buffer_vec.as_slice()) {
-                Ok(0) | Err(_) => {
-                    connection_closed = true;
-                }
+                Ok(0) => connection_closed = true,
                 Ok(bytes_written) => {
                     if bytes_written != bytes_to_be_written {
                         response_buffer_vec.drain(..bytes_written);
@@ -334,6 +330,8 @@ impl<T: Read + Write> HttpConnection<T> {
                         response_fully_written = true;
                     }
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(_) => connection_closed = true,
             }
         }
 
