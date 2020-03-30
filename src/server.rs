@@ -1,5 +1,6 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
+
 extern crate epoll;
 
 use std::collections::HashMap;
@@ -301,8 +302,11 @@ impl HttpServer {
         // current thread until at least one event is received.
         // The received notifications will then populate the `events` array with
         // `event_count` elements, where 1 <= event_count <= MAX_CONNECTIONS.
-        let event_count =
-            epoll::wait(self.epoll_fd, -1, &mut events[..]).map_err(ServerError::IOError)?;
+        let event_count = match epoll::wait(self.epoll_fd, -1, &mut events[..]) {
+            Ok(event_count) => event_count,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => 0,
+            Err(e) => return Err(ServerError::IOError(e)),
+        };
         // We use `take()` on the iterator over `events` as, even though only
         // `events_count` events have been inserted into `events`, the size of
         // the array is still `MAX_CONNECTIONS`, so we discard empty elements
