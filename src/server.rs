@@ -557,7 +557,7 @@ mod tests {
     use common::Body;
     use utils::tempfile::TempFile;
 
-    fn get_path_to_socket() -> TempFile {
+    fn get_temp_socket_file() -> TempFile {
         let mut path_to_socket = TempFile::new().unwrap();
         path_to_socket.remove().unwrap();
         path_to_socket
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_wait_one_connection() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn test_wait_concurrent_connections() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
@@ -673,7 +673,7 @@ mod tests {
 
     #[test]
     fn test_wait_expect_connection() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
@@ -722,7 +722,7 @@ mod tests {
 
     #[test]
     fn test_wait_many_connections() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
@@ -742,7 +742,7 @@ mod tests {
 
     #[test]
     fn test_wait_parse_error() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_wait_in_flight_responses() {
-        let path_to_socket = get_path_to_socket();
+        let path_to_socket = get_temp_socket_file();
 
         let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
         server.start_server().unwrap();
