@@ -4,10 +4,9 @@
 use std::str::from_utf8;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF, SP};
-use crate::common::headers::Headers;
-use crate::common::{Body, Method, Version};
-
 pub use crate::common::RequestError;
+use crate::common::{Body, Method, Version};
+use crate::headers::Headers;
 
 // This type represents the RequestLine raw parts: method, uri and version.
 type RequestLineParts<'a> = (&'a [u8], &'a [u8], &'a [u8]);
