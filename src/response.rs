@@ -27,6 +27,8 @@ pub enum StatusCode {
     InternalServerError,
     /// 501, Not Implemented
     NotImplemented,
+    /// 503, Service Unavailable
+    ServiceUnavailable,
 }
 
 impl StatusCode {
@@ -40,6 +42,7 @@ impl StatusCode {
             StatusCode::NotFound => b"404",
             StatusCode::InternalServerError => b"500",
             StatusCode::NotImplemented => b"501",
+            StatusCode::ServiceUnavailable => b"503",
         }
     }
 }
@@ -285,5 +288,6 @@ mod tests {
         assert_eq!(StatusCode::NotFound.raw(), b"404");
         assert_eq!(StatusCode::InternalServerError.raw(), b"500");
         assert_eq!(StatusCode::NotImplemented.raw(), b"501");
+        assert_eq!(StatusCode::ServiceUnavailable.raw(), b"503");
     }
 }
