@@ -14,7 +14,7 @@ use crate::response::{Response, StatusCode};
 const BUFFER_SIZE: usize = 1024;
 
 /// Describes the state machine of an HTTP connection.
-pub(crate) enum ConnectionState {
+enum ConnectionState {
     WaitingForRequestLine,
     WaitingForHeaders,
     WaitingForBody,
