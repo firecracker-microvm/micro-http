@@ -4,29 +4,27 @@
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "epoll"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "990bcfe26bea89669ede68c3f970f61d02568dbc8660317c98d805ea4e710685"
 dependencies = [
- "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bitflags",
+ "libc",
 ]
 
 [[package]]
 name = "libc"
 version = "0.2.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d515b1f41455adea1313a4a2ac8a8a477634fbae63cc6100e3aebb207ce61558"
 
 [[package]]
 name = "micro_http"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "epoll 4.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "epoll",
 ]
-
-[metadata]
-"checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
-"checksum epoll 4.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "990bcfe26bea89669ede68c3f970f61d02568dbc8660317c98d805ea4e710685"
-"checksum libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)" = "d515b1f41455adea1313a4a2ac8a8a477634fbae63cc6100e3aebb207ce61558"
