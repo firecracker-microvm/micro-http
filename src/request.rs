@@ -347,7 +347,7 @@ mod tests {
         );
 
         // Test for invalid method.
-        let request_line = b"POST http://localhost/home HTTP/1.0";
+        let request_line = b"CONNECT http://localhost/home HTTP/1.0";
         assert_eq!(
             RequestLine::try_from(request_line).unwrap_err(),
             RequestError::InvalidHttpMethod("Unsupported HTTP method.")
