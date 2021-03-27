@@ -134,6 +134,7 @@ impl Display for ConnectionError {
 
 /// Errors pertaining to `HttpRoute`.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum RouteError {
     /// Handler for http routing path already exists.
     HandlerExist(String),

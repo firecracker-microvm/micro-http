@@ -1,7 +1,6 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use logger::error;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
@@ -15,7 +14,7 @@ use crate::request::Request;
 use crate::response::{Response, StatusCode};
 use std::collections::HashMap;
 
-use utils::epoll;
+use vmm_sys_util::epoll;
 
 static SERVER_FULL_ERROR_MESSAGE: &[u8] = b"HTTP/1.1 503\r\n\
                                             Server: Firecracker API\r\n\
@@ -310,7 +309,7 @@ impl HttpServer {
         // current thread until at least one event is received.
         // The received notifications will then populate the `events` array with
         // `event_count` elements, where 1 <= event_count <= MAX_CONNECTIONS.
-        let event_count = match self.epoll.wait(MAX_CONNECTIONS, -1, &mut events[..]) {
+        let event_count = match self.epoll.wait(-1, &mut events[..]) {
             Ok(event_count) => event_count,
             Err(e) if e.raw_os_error() == Some(libc::EINTR) => 0,
             Err(e) => return Err(ServerError::IOError(e)),
@@ -403,11 +402,11 @@ impl HttpServer {
         }
 
         // Remove dead connections.
-        let epoll_fd = self.epoll_fd;
+        let epoll = &self.epoll;
         self.connections.retain(|rawfd, client_connection| {
             if client_connection.is_done() {
                 // The rawfd should have been registered to the epoll fd.
-                Self::epoll_del(epoll_fd, *rawfd).unwrap();
+                Self::epoll_del(epoll, *rawfd).unwrap();
                 false
             } else {
                 true
@@ -429,8 +428,6 @@ impl HttpServer {
                     if let ServerError::ConnectionError(ConnectionError::InvalidWrite) = e {
                         // Nothing is logged since an InvalidWrite means we have successfully
                         // flushed the connection
-                    } else {
-                        error!("Connection write error: {}", e);
                     }
                     break;
                 }
@@ -450,7 +447,7 @@ impl HttpServer {
     /// use std::os::unix::io::AsRawFd;
     ///
     /// use micro_http::{HttpServer, Response, StatusCode};
-    /// use utils::epoll;
+    /// use vmm_sys_util::epoll;
     ///
     /// // Create our epoll manager.
     /// let epoll = epoll::Epoll::new().unwrap();
@@ -476,7 +473,7 @@ impl HttpServer {
     /// // Control loop of the application.
     /// let mut events = Vec::with_capacity(10);
     /// loop {
-    ///     let num_ev = epoll.wait(10, -1, events.as_mut_slice());
+    ///     let num_ev = epoll.wait(-1, events.as_mut_slice());
     ///     for event in events {
     ///         match event.data() {
     ///             // The server notification.
@@ -596,14 +593,14 @@ impl HttpServer {
     }
 
     /// Removes a stream to the `epoll` notification structure.
-    fn epoll_del(epoll_fd: RawFd, stream_fd: RawFd) -> Result<()> {
-        epoll::ctl(
-            epoll_fd,
-            epoll::ControlOptions::EPOLL_CTL_DEL,
-            stream_fd,
-            epoll::Event::new(epoll::Events::EPOLLIN, stream_fd as u64),
-        )
-        .map_err(ServerError::IOError)
+    fn epoll_del(epoll: &epoll::Epoll, stream_fd: RawFd) -> Result<()> {
+        epoll
+            .ctl(
+                epoll::ControlOperation::Delete,
+                stream_fd,
+                epoll::EpollEvent::new(epoll::EventSet::IN, stream_fd as u64),
+            )
+            .map_err(ServerError::IOError)
     }
 }
 
@@ -615,7 +612,7 @@ mod tests {
     use std::os::unix::net::UnixStream;
 
     use crate::common::Body;
-    use utils::tempfile::TempFile;
+    use vmm_sys_util::tempfile::TempFile;
 
     fn get_temp_socket_file() -> TempFile {
         let mut path_to_socket = TempFile::new().unwrap();
