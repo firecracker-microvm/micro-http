@@ -6,4 +6,5 @@ authors = ["Amazon Firecracker team <firecracker-devel@amazon.com>"]
 edition = "2018"
 
 [dependencies]
-epoll = ">=4.0.1"
+libc = ">=0.2.39"
+vmm-sys-util = ">=0.6.1"

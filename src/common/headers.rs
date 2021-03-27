@@ -534,7 +534,10 @@ mod tests {
                 b"Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\nContent-Length: -55\r\n\r\n"
             )
             .unwrap_err(),
-            RequestError::InvalidHeader
+            RequestError::HeaderError(HttpHeaderError::InvalidValue(
+                "Content-Length".to_string(),
+                " -55".to_string()
+            ))
         );
 
         let bytes: [u8; 10] = [130, 140, 150, 130, 140, 150, 130, 140, 150, 160];
