@@ -383,4 +383,15 @@ mod tests {
         response.allow_method(Method::Put);
         assert_eq!(response.allow(), vec![Method::Get, Method::Put]);
     }
+
+    #[test]
+    fn test_equal() {
+        let response = Response::new(Version::Http10, StatusCode::MethodNotAllowed);
+        let another_response = Response::new(Version::Http10, StatusCode::MethodNotAllowed);
+        assert_eq!(response, another_response);
+
+        let response = Response::new(Version::Http10, StatusCode::OK);
+        let another_response = Response::new(Version::Http10, StatusCode::BadRequest);
+        assert_ne!(response, another_response);
+    }
 }

@@ -523,6 +523,14 @@ mod tests {
     }
 
     #[test]
+    fn test_display_route_error() {
+        assert_eq!(
+            format!("{}", RouteError::HandlerExist("test".to_string())),
+            "handler for test already exists"
+        );
+    }
+
+    #[test]
     fn test_method_to_str() {
         let val = Method::Get;
         assert_eq!(val.to_str(), "GET");
