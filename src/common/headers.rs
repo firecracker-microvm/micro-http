@@ -432,6 +432,7 @@ mod tests {
         assert_eq!(headers.content_length(), 0);
         assert_eq!(headers.chunked(), false);
         assert_eq!(headers.expect(), false);
+        assert_eq!(headers.accept(), MediaType::PlainText);
     }
 
     #[test]
@@ -725,5 +726,14 @@ mod tests {
 
         let header = Header::try_from(b"Accept").unwrap();
         assert_eq!(header.raw(), b"Accept");
+    }
+
+    #[test]
+    fn test_set_accept() {
+        let mut headers = Headers::default();
+        assert_eq!(headers.accept(), MediaType::PlainText);
+
+        headers.set_accept(MediaType::ApplicationJson);
+        assert_eq!(headers.accept(), MediaType::ApplicationJson);
     }
 }
