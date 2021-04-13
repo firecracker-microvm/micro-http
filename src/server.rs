@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::io::{Read, Write};
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
@@ -272,6 +271,26 @@ impl HttpServer {
         let socket = UnixListener::bind(path_to_socket).map_err(ServerError::IOError)?;
         let epoll = epoll::Epoll::new().map_err(ServerError::IOError)?;
         Ok(Self {
+            socket,
+            epoll,
+            connections: HashMap::new(),
+        })
+    }
+
+    /// Constructor for `HttpServer`.
+    ///
+    /// Note that this function requires the socket_fd to be solely owned
+    /// and not be associated with another File in the caller as it uses
+    /// the unsafe `UnixListener::from_raw_fd method`.
+    ///
+    /// Returns the newly formed `HttpServer`.
+    ///
+    /// # Errors
+    /// Returns an `IOError` when `epoll::create` fails.
+    pub fn new_from_fd(socket_fd: RawFd) -> Result<Self> {
+        let socket = unsafe { UnixListener::from_raw_fd(socket_fd) };
+        let epoll = epoll::Epoll::new().map_err(ServerError::IOError)?;
+        Ok(HttpServer {
             socket,
             epoll,
             connections: HashMap::new(),
@@ -654,6 +673,51 @@ mod tests {
 
         let mut buf: [u8; 1024] = [0; 1024];
         assert!(socket.read(&mut buf[..]).unwrap() > 0);
+    }
+
+    #[test]
+    fn test_wait_one_fd_connection() {
+        use std::os::unix::io::IntoRawFd;
+        let path_to_socket = get_temp_socket_file();
+
+        let socket_listener = UnixListener::bind(path_to_socket.as_path()).unwrap();
+        let socket_fd = socket_listener.into_raw_fd();
+
+        let mut server = HttpServer::new_from_fd(socket_fd).unwrap();
+        server.start_server().unwrap();
+
+        // Test one incoming connection.
+        let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
+        assert!(server.requests().unwrap().is_empty());
+
+        socket
+            .write_all(
+                b"PATCH /machine-config HTTP/1.1\r\n\
+                         Content-Length: 13\r\n\
+                         Content-Type: application/json\r\n\r\nwhatever body",
+            )
+            .unwrap();
+
+        let mut req_vec = server.requests().unwrap();
+        let server_request = req_vec.remove(0);
+
+        server
+            .respond(server_request.process(|request| {
+                assert_eq!(
+                    std::str::from_utf8(&request.body.as_ref().unwrap().body).unwrap(),
+                    "whatever body"
+                );
+                let mut response = Response::new(Version::Http11, StatusCode::OK);
+                let response_body = b"response body";
+                response.set_body(Body::new(response_body.to_vec()));
+                response
+            }))
+            .unwrap();
+        assert!(server.requests().unwrap().is_empty());
+
+        let mut buf: [u8; 1024] = [0; 1024];
+        assert!(socket.read(&mut buf[..]).unwrap() > 0);
+        assert!(String::from_utf8_lossy(&buf).contains("response body"));
     }
 
     #[test]
