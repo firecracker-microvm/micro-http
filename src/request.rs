@@ -12,7 +12,7 @@ use crate::headers::Headers;
 // This type represents the RequestLine raw parts: method, uri and version.
 type RequestLineParts<'a> = (&'a [u8], &'a [u8], &'a [u8]);
 
-/// Finds the first occurence of `sequence` in the `bytes` slice.
+/// Finds the first occurrence of `sequence` in the `bytes` slice.
 ///
 /// Returns the starting position of the `sequence` in `bytes` or `None` if the
 /// `sequence` is not found.
