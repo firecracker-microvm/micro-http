@@ -263,12 +263,12 @@ impl Response {
         self.body.clone()
     }
 
-    /// Returns the HTTP Version of the response.
+    /// Returns the Content Length of the response.
     pub fn content_length(&self) -> i32 {
         self.headers.content_length
     }
 
-    /// Returns the HTTP Version of the response.
+    /// Returns the Content Type of the response.
     pub fn content_type(&self) -> MediaType {
         self.headers.content_type
     }
