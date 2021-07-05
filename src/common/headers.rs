@@ -1,6 +1,7 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::result::Result;
 
 use crate::HttpHeaderError;
@@ -94,6 +95,8 @@ pub struct Headers {
     /// `Accept` header might be used by HTTP clients to enforce server responses with content
     /// formatted in a specific way.
     accept: MediaType,
+    /// Hashmap reserved for storing custom headers.
+    custom_entries: HashMap<String, String>,
 }
 
 impl Default for Headers {
@@ -106,6 +109,7 @@ impl Default for Headers {
             // The default `Accept` media type is plain text. This is inclusive enough
             // for structured and unstructured text.
             accept: MediaType::PlainText,
+            custom_entries: HashMap::default(),
         }
     }
 }
@@ -206,12 +210,11 @@ impl Headers {
                         Header::AcceptEncoding => Encoding::try_from(entry[1].trim().as_bytes()),
                     }
                 } else {
-                    Err(RequestError::HeaderError(
-                        HttpHeaderError::UnsupportedValue(
-                            entry[0].to_string(),
-                            entry[1].to_string(),
-                        ),
-                    ))
+                    self.insert_custom_header(
+                        entry[0].trim().to_string(),
+                        entry[1].trim().to_string(),
+                    )?;
+                    Ok(())
                 }
             }
             Err(utf8_err) => Err(RequestError::HeaderError(
@@ -288,6 +291,17 @@ impl Headers {
     /// Accept header setter.
     pub fn set_accept(&mut self, media_type: MediaType) {
         self.accept = media_type;
+    }
+
+    /// Insert a new custom header and value pair into the `HashMap`.
+    pub fn insert_custom_header(&mut self, key: String, value: String) -> Result<(), RequestError> {
+        self.custom_entries.insert(key, value);
+        Ok(())
+    }
+
+    /// Returns the custom header `HashMap`.
+    pub fn custom_entries(&self) -> &HashMap<String, String> {
+        &self.custom_entries
     }
 }
 
@@ -414,6 +428,7 @@ impl MediaType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     impl Headers {
         pub fn new(content_length: u32, expect: bool, chunked: bool) -> Self {
@@ -422,6 +437,7 @@ mod tests {
                 expect,
                 chunked,
                 accept: MediaType::PlainText,
+                custom_entries: HashMap::default(),
             }
         }
     }
@@ -433,6 +449,7 @@ mod tests {
         assert_eq!(headers.chunked(), false);
         assert_eq!(headers.expect(), false);
         assert_eq!(headers.accept(), MediaType::PlainText);
+        assert_eq!(headers.custom_entries(), &HashMap::default());
     }
 
     #[test]
@@ -512,6 +529,11 @@ mod tests {
             .unwrap();
         assert_eq!(headers.content_length, 55);
         assert_eq!(headers.accept, MediaType::ApplicationJson);
+        assert_eq!(
+            headers.custom_entries().get("Last-Modified").unwrap(),
+            "Tue, 15 Nov 1994 12:45:26 GMT"
+        );
+        assert_eq!(headers.custom_entries().len(), 1);
 
         // Valid headers. (${HEADER_NAME} : WHITESPACE ${HEADER_VALUE})
         // Any number of whitespace characters should be accepted including zero.
@@ -529,7 +551,17 @@ mod tests {
         .unwrap();
         assert_eq!(headers.content_length, 29);
 
-        // Valid headers.
+        // Custom headers only.
+        let headers = Headers::try_from(
+            b"Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\nfoo: bar\r\nbar: 15\r\n\r\n",
+        )
+        .unwrap();
+        let custom_entries = headers.custom_entries();
+        assert_eq!(custom_entries.get("foo").unwrap(), "bar");
+        assert_eq!(custom_entries.get("bar").unwrap(), "15");
+        assert_eq!(custom_entries.len(), 3);
+
+        // Valid headers, invalid value.
         assert_eq!(
             Headers::try_from(
                 b"Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\nContent-Length: -55\r\n\r\n"
@@ -656,6 +688,15 @@ mod tests {
                 " identity;q=0".to_string()
             )))
         );
+
+        // Test custom header.
+        assert_eq!(header.custom_entries().len(), 0);
+        assert!(header.parse_header_line(b"Custom-Header: foo").is_ok());
+        assert_eq!(
+            header.custom_entries().get("Custom-Header").unwrap(),
+            &"foo".to_string()
+        );
+        assert_eq!(header.custom_entries().len(), 1);
     }
 
     #[test]
@@ -697,6 +738,13 @@ mod tests {
         // For Expect
         assert!(header.parse_header_line(b"Expect:100-continue").is_ok());
         assert!(header.parse_header_line(b"Expect:    100-continue").is_ok());
+
+        // Test that custom headers' names and values are trimmed before being stored
+        // inside the HashMap.
+        assert!(header.parse_header_line(b"Foo:bar").is_ok());
+        assert_eq!(header.custom_entries().get("Foo").unwrap(), "bar");
+        assert!(header.parse_header_line(b"  Bar  :  foo  ").is_ok());
+        assert_eq!(header.custom_entries().get("Bar").unwrap(), "foo");
     }
 
     #[test]
