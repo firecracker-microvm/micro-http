@@ -17,48 +17,48 @@ pub mod ascii {
 ///Errors associated with a header that is invalid.
 #[derive(Debug, PartialEq)]
 pub enum HttpHeaderError {
+    /// The header is misformatted.
+    InvalidFormat(String),
+    /// The specified header contains illegal characters.
+    InvalidUtf8String(Utf8Error),
+    ///The value specified is not valid.
+    InvalidValue(String, String),
     /// The content length specified is longer than the limit imposed by Micro Http.
     SizeLimitExceeded(String),
+    /// The requested feature is not currently supported.
+    UnsupportedFeature(String, String),
     /// The header specified is not supported.
     UnsupportedName(String),
     /// The value for the specified header is not supported.
     UnsupportedValue(String, String),
-    /// The specified header contains illegal characters.
-    InvalidUtf8String(Utf8Error),
-    /// The requested feature is not currently supported.
-    UnsupportedFeature(String, String),
-    /// The header is misformatted.
-    InvalidFormat(String),
-    ///The value specified is not valid.
-    InvalidValue(String, String),
 }
 
 impl Display for HttpHeaderError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::SizeLimitExceeded(inner) => {
-                write!(f, "Invalid content length. Header: {}", inner)
+            Self::InvalidFormat(header_key) => {
+                write!(f, "Header is incorrectly formatted. Key: {}", header_key)
             }
-            Self::UnsupportedName(inner) => write!(f, "Unsupported header name. Key: {}", inner),
-            Self::UnsupportedValue(header_key, header_value) => write!(
-                f,
-                "Unsupported value. Key:{}; Value:{}",
-                header_key, header_value
-            ),
             Self::InvalidUtf8String(header_key) => {
                 write!(f, "Header contains invalid characters. Key: {}", header_key)
+            }
+            Self::InvalidValue(header_name, value) => {
+                write!(f, "Invalid value. Key:{}; Value:{}", header_name, value)
+            }
+            Self::SizeLimitExceeded(inner) => {
+                write!(f, "Invalid content length. Header: {}", inner)
             }
             Self::UnsupportedFeature(header_key, header_value) => write!(
                 f,
                 "Unsupported feature. Key: {}; Value: {}",
                 header_key, header_value
             ),
-            Self::InvalidFormat(header_key) => {
-                write!(f, "Header is incorrectly formatted. Key: {}", header_key)
-            }
-            Self::InvalidValue(header_name, value) => {
-                write!(f, "Invalid value. Key:{}; Value:{}", header_name, value)
-            }
+            Self::UnsupportedName(inner) => write!(f, "Unsupported header name. Key: {}", inner),
+            Self::UnsupportedValue(header_key, header_value) => write!(
+                f,
+                "Unsupported value. Key:{}; Value:{}",
+                header_key, header_value
+            ),
         }
     }
 }
@@ -68,18 +68,18 @@ impl Display for HttpHeaderError {
 pub enum RequestError {
     /// No request was pending while the request body was being parsed.
     BodyWithoutPendingRequest,
+    /// Header specified is either invalid or not supported by this HTTP implementation.
+    HeaderError(HttpHeaderError),
     /// No request was pending while the request headers were being parsed.
     HeadersWithoutPendingRequest,
     /// The HTTP Method is not supported or it is invalid.
     InvalidHttpMethod(&'static str),
-    /// Request URI is invalid.
-    InvalidUri(&'static str),
     /// The HTTP Version in the Request is not supported or it is invalid.
     InvalidHttpVersion(&'static str),
-    /// Header specified is either invalid or not supported by this HTTP implementation.
-    HeaderError(HttpHeaderError),
     /// The Request is invalid and cannot be served.
     InvalidRequest,
+    /// Request URI is invalid.
+    InvalidUri(&'static str),
     /// Overflow occurred when parsing a request.
     Overflow,
     /// Underflow occurred when parsing a request.
@@ -93,15 +93,15 @@ impl Display for RequestError {
                 f,
                 "No request was pending while the request body was being parsed."
             ),
+            Self::HeaderError(inner) => write!(f, "Invalid header. Reason: {}", inner),
             Self::HeadersWithoutPendingRequest => write!(
                 f,
                 "No request was pending while the request headers were being parsed."
             ),
             Self::InvalidHttpMethod(inner) => write!(f, "Invalid HTTP Method: {}", inner),
-            Self::InvalidUri(inner) => write!(f, "Invalid URI: {}", inner),
             Self::InvalidHttpVersion(inner) => write!(f, "Invalid HTTP Version: {}", inner),
-            Self::HeaderError(inner) => write!(f, "Invalid header. Reason: {}", inner),
             Self::InvalidRequest => write!(f, "Invalid request."),
+            Self::InvalidUri(inner) => write!(f, "Invalid URI: {}", inner),
             Self::Overflow => write!(f, "Overflow occurred when parsing a request."),
             Self::Underflow => write!(f, "Underflow occurred when parsing a request."),
         }
@@ -111,23 +111,23 @@ impl Display for RequestError {
 /// Errors associated with a HTTP Connection.
 #[derive(Debug)]
 pub enum ConnectionError {
-    /// The request parsing has failed.
-    ParseError(RequestError),
-    /// Could not perform a stream operation successfully.
-    StreamError(std::io::Error),
     /// Attempted to read or write on a closed connection.
     ConnectionClosed,
     /// Attempted to write on a stream when there was nothing to write.
     InvalidWrite,
+    /// The request parsing has failed.
+    ParseError(RequestError),
+    /// Could not perform a stream operation successfully.
+    StreamError(std::io::Error),
 }
 
 impl Display for ConnectionError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::ParseError(inner) => write!(f, "Parsing error: {}", inner),
-            Self::StreamError(inner) => write!(f, "Stream error: {}", inner),
             Self::ConnectionClosed => write!(f, "Connection closed."),
             Self::InvalidWrite => write!(f, "Invalid write attempt."),
+            Self::ParseError(inner) => write!(f, "Parsing error: {}", inner),
+            Self::StreamError(inner) => write!(f, "Stream error: {}", inner),
         }
     }
 }
@@ -151,14 +151,14 @@ impl Display for RouteError {
 /// Errors pertaining to `HttpServer`.
 #[derive(Debug)]
 pub enum ServerError {
-    /// Epoll operations failed.
-    IOError(std::io::Error),
     /// Error from one of the connections.
     ConnectionError(ConnectionError),
-    /// Server maximum capacity has been reached.
-    ServerFull,
+    /// Epoll operations failed.
+    IOError(std::io::Error),
     /// Overflow occured while processing messages.
     Overflow,
+    /// Server maximum capacity has been reached.
+    ServerFull,
     /// Underflow occured while processing mesagges.
     Underflow,
 }
@@ -166,10 +166,10 @@ pub enum ServerError {
 impl Display for ServerError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::IOError(inner) => write!(f, "IO error: {}", inner),
             Self::ConnectionError(inner) => write!(f, "Connection error: {}", inner),
-            Self::ServerFull => write!(f, "Server is full."),
+            Self::IOError(inner) => write!(f, "IO error: {}", inner),
             Self::Overflow => write!(f, "Overflow occured while processing messages."),
+            Self::ServerFull => write!(f, "Server is full."),
             Self::Underflow => write!(f, "Underflow occured while processing messages."),
         }
     }
@@ -419,9 +419,36 @@ mod tests {
         assert_eq!(
             format!(
                 "{}",
+                RequestError::HeaderError(HttpHeaderError::InvalidFormat("test".to_string()))
+            ),
+            "Invalid header. Reason: Header is incorrectly formatted. Key: test"
+        );
+        let value = String::from_utf8(vec![0, 159]);
+        assert_eq!(
+            format!(
+                "{}",
+                RequestError::HeaderError(HttpHeaderError::InvalidUtf8String(
+                    value.unwrap_err().utf8_error()
+                ))
+            ),
+            "Invalid header. Reason: Header contains invalid characters. Key: invalid utf-8 sequence of 1 bytes from index 1"
+        );
+        assert_eq!(
+            format!(
+                "{}",
                 RequestError::HeaderError(HttpHeaderError::SizeLimitExceeded("test".to_string()))
             ),
             "Invalid header. Reason: Invalid content length. Header: test"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                RequestError::HeaderError(HttpHeaderError::UnsupportedFeature(
+                    "test".to_string(),
+                    "test".to_string()
+                ))
+            ),
+            "Invalid header. Reason: Unsupported feature. Key: test; Value: test"
         );
         assert_eq!(
             format!(
@@ -440,37 +467,14 @@ mod tests {
             ),
             "Invalid header. Reason: Unsupported value. Key:test; Value:test"
         );
-        let value = String::from_utf8(vec![0, 159]);
-        assert_eq!(
-            format!(
-                "{}",
-                RequestError::HeaderError(HttpHeaderError::InvalidUtf8String(
-                    value.unwrap_err().utf8_error()
-                ))
-            ),
-            "Invalid header. Reason: Header contains invalid characters. Key: invalid utf-8 sequence of 1 bytes from index 1"
-        );
-        assert_eq!(
-            format!(
-                "{}",
-                RequestError::HeaderError(HttpHeaderError::UnsupportedFeature(
-                    "test".to_string(),
-                    "test".to_string()
-                ))
-            ),
-            "Invalid header. Reason: Unsupported feature. Key: test; Value: test"
-        );
-        assert_eq!(
-            format!(
-                "{}",
-                RequestError::HeaderError(HttpHeaderError::InvalidFormat("test".to_string()))
-            ),
-            "Invalid header. Reason: Header is incorrectly formatted. Key: test"
-        );
     }
 
     #[test]
     fn test_display_connection_error() {
+        assert_eq!(
+            format!("{}", ConnectionError::ConnectionClosed),
+            "Connection closed."
+        );
         assert_eq!(
             format!(
                 "{}",
@@ -479,19 +483,15 @@ mod tests {
             "Parsing error: Invalid request."
         );
         assert_eq!(
+            format!("{}", ConnectionError::InvalidWrite),
+            "Invalid write attempt."
+        );
+        assert_eq!(
             format!(
                 "{}",
                 ConnectionError::StreamError(std::io::Error::from_raw_os_error(11))
             ),
             "Stream error: Resource temporarily unavailable (os error 11)"
-        );
-        assert_eq!(
-            format!("{}", ConnectionError::ConnectionClosed),
-            "Connection closed."
-        );
-        assert_eq!(
-            format!("{}", ConnectionError::InvalidWrite),
-            "Invalid write attempt."
         );
     }
 
@@ -504,7 +504,6 @@ mod tests {
             ),
             "Connection error: Connection closed."
         );
-        assert_eq!(format!("{}", ServerError::ServerFull), "Server is full.");
         assert_eq!(
             format!(
                 "{}",
@@ -516,6 +515,7 @@ mod tests {
             format!("{}", ServerError::Overflow),
             "Overflow occured while processing messages."
         );
+        assert_eq!(format!("{}", ServerError::ServerFull), "Server is full.");
         assert_eq!(
             format!("{}", ServerError::Underflow),
             "Underflow occured while processing messages."
