@@ -754,8 +754,7 @@ mod tests {
         second_socket
             .write_all(
                 b"GET /machine-config HTTP/1.1\r\n\
-                                Content-Length: 20\r\n\
-                                Content-Type: application/json\r\n\r\nwhatever second body",
+                                Content-Type: application/json\r\n\r\n",
             )
             .unwrap();
 
@@ -766,8 +765,7 @@ mod tests {
             second_server_request.request,
             Request::try_from(
                 b"GET /machine-config HTTP/1.1\r\n\
-            Content-Length: 20\r\n\
-            Content-Type: application/json\r\n\r\nwhatever second body"
+            Content-Type: application/json\r\n\r\n"
             )
             .unwrap()
         );
@@ -980,8 +978,7 @@ mod tests {
         second_socket
             .write_all(
                 b"GET /machine-config HTTP/1.1\r\n\
-                                Content-Length: 20\r\n\
-                                Content-Type: application/json\r\n\r\nwhatever second body",
+                                Content-Type: application/json\r\n\r\n",
             )
             .unwrap();
 
@@ -992,8 +989,7 @@ mod tests {
             second_server_request.request,
             Request::try_from(
                 b"GET /machine-config HTTP/1.1\r\n\
-            Content-Length: 20\r\n\
-            Content-Type: application/json\r\n\r\nwhatever second body"
+            Content-Type: application/json\r\n\r\n"
             )
             .unwrap()
         );
