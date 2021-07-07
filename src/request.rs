@@ -181,9 +181,18 @@ impl Request {
     /// ```
     /// use micro_http::Request;
     ///
-    /// let http_request = Request::try_from(b"GET http://localhost/home HTTP/1.0\r\n\r\n").unwrap();
+    /// let max_request_len = 2000;
+    /// let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\r\n";
+    /// let http_request = Request::try_from(request_bytes, Some(max_request_len)).unwrap();
     /// ```
-    pub fn try_from(byte_stream: &[u8]) -> Result<Self, RequestError> {
+    pub fn try_from(byte_stream: &[u8], max_len: Option<usize>) -> Result<Self, RequestError> {
+        // If a size limit is provided, verify the request length does not exceed it.
+        if let Some(limit) = max_len {
+            if byte_stream.len() >= limit {
+                return Err(RequestError::InvalidRequest);
+            }
+        }
+
         // The first line of the request is the Request Line. The line ending is CR LF.
         let request_line_end = match find(byte_stream, &[CR, LF]) {
             Some(len) => len,
@@ -439,7 +448,7 @@ mod tests {
         };
         let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\
                                      Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\n\r\n";
-        let request = Request::try_from(request_bytes).unwrap();
+        let request = Request::try_from(request_bytes, None).unwrap();
         assert_eq!(request, expected_request);
         assert_eq!(request.uri(), &Uri::new("http://localhost/home"));
         assert_eq!(request.http_version(), Version::Http10);
@@ -448,14 +457,14 @@ mod tests {
         // Test for invalid Request (missing CR LF).
         let request_bytes = b"GET / HTTP/1.1";
         assert_eq!(
-            Request::try_from(request_bytes).unwrap_err(),
+            Request::try_from(request_bytes, None).unwrap_err(),
             RequestError::InvalidRequest
         );
 
         // Test for invalid Request (length is less than minimum).
         let request_bytes = b"GET";
         assert_eq!(
-            Request::try_from(request_bytes).unwrap_err(),
+            Request::try_from(request_bytes, None).unwrap_err(),
             RequestError::InvalidRequest
         );
 
@@ -464,18 +473,29 @@ mod tests {
                                         Content-Length: 13\r\n\
                                         Content-Type: application/json\r\n\r\nwhatever body";
         assert_eq!(
-            Request::try_from(request_bytes).unwrap_err(),
+            Request::try_from(request_bytes, None).unwrap_err(),
             RequestError::InvalidRequest
         );
 
+        // Test for request larger than maximum len provided.
+        let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\
+                                     Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\n\r\n";
+        assert_eq!(
+            Request::try_from(request_bytes, Some(20)).unwrap_err(),
+            RequestError::InvalidRequest
+        );
+
+        // Test request smaller than maximum len provided is ok.
+        let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\
+                                     Last-Modified: Tue, 15 Nov 1994 12:45:26 GMT\r\n\r\n";
+        assert!(Request::try_from(request_bytes, Some(500)).is_ok());
+
         // Test for a request with the headers we are looking for.
-        let request = Request::try_from(
-            b"PATCH http://localhost/home HTTP/1.1\r\n\
-                                     Expect: 100-continue\r\n\
-                                     Transfer-Encoding: chunked\r\n\
-                                     Content-Length: 26\r\n\r\nthis is not\n\r\na json \nbody",
-        )
-        .unwrap();
+        let request_bytes = b"PATCH http://localhost/home HTTP/1.1\r\n\
+                              Expect: 100-continue\r\n\
+                              Transfer-Encoding: chunked\r\n\
+                              Content-Length: 26\r\n\r\nthis is not\n\r\na json \nbody";
+        let request = Request::try_from(request_bytes, None).unwrap();
         assert_eq!(request.uri(), &Uri::new("http://localhost/home"));
         assert_eq!(request.http_version(), Version::Http11);
         assert_eq!(request.method(), Method::Patch);
@@ -490,31 +510,26 @@ mod tests {
         );
 
         // Test for an invalid request format.
-        Request::try_from(b"PATCH http://localhost/home HTTP/1.1\r\n").unwrap_err();
+        Request::try_from(b"PATCH http://localhost/home HTTP/1.1\r\n", None).unwrap_err();
 
         // Test for an invalid encoding.
-        assert!(Request::try_from(
-            b"PATCH http://localhost/home HTTP/1.1\r\n\
-                                     Expect: 100-continue\r\n\
-                                     Transfer-Encoding: identity; q=0\r\n\
-                                     Content-Length: 26\r\n\r\nthis is not\n\r\na json \nbody",
-        )
-        .is_ok());
+        let request_bytes = b"PATCH http://localhost/home HTTP/1.1\r\n\
+                                Expect: 100-continue\r\n\
+                                Transfer-Encoding: identity; q=0\r\n\
+                                Content-Length: 26\r\n\r\nthis is not\n\r\na json \nbody";
+
+        assert!(Request::try_from(request_bytes, None).is_ok());
 
         // Test for an invalid content length.
-        let request = Request::try_from(
-            b"PATCH http://localhost/home HTTP/1.1\r\n\
-                                     Content-Length: 5000\r\n\r\nthis is a short body",
-        )
-        .unwrap_err();
+        let request_bytes = b"PATCH http://localhost/home HTTP/1.1\r\n\
+                                Content-Length: 5000\r\n\r\nthis is a short body";
+        let request = Request::try_from(request_bytes, None).unwrap_err();
         assert_eq!(request, RequestError::InvalidRequest);
 
         // Test for a request without a body and an optional header.
-        let request = Request::try_from(
-            b"GET http://localhost/ HTTP/1.0\r\n\
-                                     Accept-Encoding: gzip\r\n\r\n",
-        )
-        .unwrap();
+        let request_bytes = b"GET http://localhost/ HTTP/1.0\r\n\
+                                Accept-Encoding: gzip\r\n\r\n";
+        let request = Request::try_from(request_bytes, None).unwrap();
         assert_eq!(request.uri(), &Uri::new("http://localhost/"));
         assert_eq!(request.http_version(), Version::Http10);
         assert_eq!(request.method(), Method::Get);
@@ -523,8 +538,9 @@ mod tests {
         assert_eq!(request.headers.content_length(), 0);
         assert!(request.body.is_none());
 
-        let request = Request::try_from(b"GET http://localhost/ HTTP/1.0\r\n\
-                                                                              Accept-Encoding: identity;q=0\r\n\r\n");
+        let request_bytes = b"GET http://localhost/ HTTP/1.0\r\n\
+                                Accept-Encoding: identity;q=0\r\n\r\n";
+        let request = Request::try_from(request_bytes, None);
         assert_eq!(
             request.unwrap_err(),
             RequestError::HeaderError(HttpHeaderError::InvalidValue(

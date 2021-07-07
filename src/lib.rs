@@ -47,7 +47,8 @@
 //! ```
 //! use micro_http::{Request, Version};
 //!
-//! let http_request = Request::try_from(b"GET http://localhost/home HTTP/1.0\r\n\r\n").unwrap();
+//! let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\r\n";
+//! let http_request = Request::try_from(request_bytes, None).unwrap();
 //! assert_eq!(http_request.http_version(), Version::Http10);
 //! assert_eq!(http_request.uri().get_abs_path(), "/home");
 //! ```
