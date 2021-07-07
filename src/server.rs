@@ -765,7 +765,8 @@ mod tests {
             second_server_request.request,
             Request::try_from(
                 b"GET /machine-config HTTP/1.1\r\n\
-            Content-Type: application/json\r\n\r\n"
+            Content-Type: application/json\r\n\r\n",
+                None
             )
             .unwrap()
         );
@@ -989,7 +990,8 @@ mod tests {
             second_server_request.request,
             Request::try_from(
                 b"GET /machine-config HTTP/1.1\r\n\
-            Content-Type: application/json\r\n\r\n"
+            Content-Type: application/json\r\n\r\n",
+                None
             )
             .unwrap()
         );
