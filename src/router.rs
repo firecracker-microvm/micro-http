@@ -79,8 +79,8 @@ impl<T: Send> HttpRoutes<T> {
     /// let handler = MockHandler {};
     /// router.add_route(Method::Get, "/func1".to_string(), Box::new(handler)).unwrap();
     ///
-    /// let request =
-    ///     Request::try_from(b"GET http://localhost/api/v1/func1 HTTP/1.1\r\n\r\n").unwrap();
+    /// let request_bytes = b"GET http://localhost/api/v1/func1 HTTP/1.1\r\n\r\n";
+    /// let request = Request::try_from(request_bytes, None).unwrap();
     /// let arg = HandlerArg(true);
     /// let reply = router.handle_http_request(&request, &arg);
     /// assert_eq!(reply.status(), StatusCode::OK);
@@ -148,7 +148,7 @@ mod tests {
             .unwrap();
 
         let request =
-            Request::try_from(b"GET http://localhost/api/v1/func2 HTTP/1.1\r\n\r\n").unwrap();
+            Request::try_from(b"GET http://localhost/api/v1/func2 HTTP/1.1\r\n\r\n", None).unwrap();
         let arg = HandlerArg(true);
         let reply = router.handle_http_request(&request, &arg);
         assert_eq!(reply.status(), StatusCode::NotFound);
