@@ -236,6 +236,9 @@ impl Request {
                         None
                     }
                     content_length => {
+                        if request_line.method == Method::Get {
+                            return Err(RequestError::InvalidRequest);
+                        }
                         // Multiplication is safe because `CRLF_LEN` is a small constant.
                         // Addition is also safe because `headers_end` started out as the result
                         // of `find(<something>, CRLFCRLF)`, then `CRLF_LEN` was subtracted from it.
@@ -451,6 +454,15 @@ mod tests {
 
         // Test for invalid Request (length is less than minimum).
         let request_bytes = b"GET";
+        assert_eq!(
+            Request::try_from(request_bytes).unwrap_err(),
+            RequestError::InvalidRequest
+        );
+
+        // Test for invalid Request (`GET` requests should have no body).
+        let request_bytes = b"GET /machine-config HTTP/1.1\r\n\
+                                        Content-Length: 13\r\n\
+                                        Content-Type: application/json\r\n\r\nwhatever body";
         assert_eq!(
             Request::try_from(request_bytes).unwrap_err(),
             RequestError::InvalidRequest
