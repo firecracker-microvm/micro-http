@@ -1,6 +1,7 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -11,7 +12,7 @@ pub use crate::common::{ConnectionError, RequestError, ServerError};
 use crate::connection::HttpConnection;
 use crate::request::Request;
 use crate::response::{Response, StatusCode};
-use std::collections::HashMap;
+use vmm_sys_util::sock_ctrl_msg::ScmSocket;
 
 use vmm_sys_util::epoll;
 
@@ -92,7 +93,7 @@ struct ClientConnection<T> {
     in_flight_response_count: u32,
 }
 
-impl<T: Read + Write> ClientConnection<T> {
+impl<T: Read + Write + ScmSocket> ClientConnection<T> {
     fn new(connection: HttpConnection<T>) -> Self {
         Self {
             connection,
@@ -113,7 +114,7 @@ impl<T: Read + Write> ClientConnection<T> {
                 // safe to drop.
                 return Ok(vec![]);
             }
-            Err(ConnectionError::StreamError(inner)) => {
+            Err(ConnectionError::StreamReadError(inner)) => {
                 // Reading from the connection failed.
                 // We should try to write an error message regardless.
                 let mut internal_error_response =
@@ -134,7 +135,7 @@ impl<T: Read + Write> ClientConnection<T> {
                 )));
                 self.connection.enqueue_response(error_response);
             }
-            Err(ConnectionError::InvalidWrite) => {
+            Err(ConnectionError::InvalidWrite) | Err(ConnectionError::StreamWriteError(_)) => {
                 // This is unreachable because `HttpConnection::try_read()` cannot return this error variant.
                 unreachable!();
             }
@@ -161,7 +162,7 @@ impl<T: Read + Write> ClientConnection<T> {
     fn write(&mut self) -> Result<()> {
         // The stream is available for writing.
         match self.connection.try_write() {
-            Err(ConnectionError::ConnectionClosed) | Err(ConnectionError::StreamError(_)) => {
+            Err(ConnectionError::ConnectionClosed) | Err(ConnectionError::StreamWriteError(_)) => {
                 // Writing to the stream failed so it will be removed.
                 self.state = ClientConnectionState::Closed;
             }
