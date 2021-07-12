@@ -10,6 +10,7 @@ pub use crate::common::{ConnectionError, HttpHeaderError, RequestError};
 use crate::headers::Headers;
 use crate::request::{find, Request, RequestLine};
 use crate::response::{Response, StatusCode};
+use vmm_sys_util::sock_ctrl_msg::ScmSocket;
 
 const BUFFER_SIZE: usize = 1024;
 
@@ -51,7 +52,7 @@ pub struct HttpConnection<T> {
     response_buffer: Option<Vec<u8>>,
 }
 
-impl<T: Read + Write> HttpConnection<T> {
+impl<T: Read + Write + ScmSocket> HttpConnection<T> {
     /// Creates an empty connection.
     pub fn new(stream: T) -> Self {
         Self {
@@ -126,10 +127,10 @@ impl<T: Read + Write> HttpConnection<T> {
         }
         // Append new bytes to what we already have in the buffer.
         // The slice access is safe, the index is checked above.
-        let bytes_read = self
+        let (bytes_read, _) = self
             .stream
-            .read(&mut self.buffer[self.read_cursor..])
-            .map_err(ConnectionError::StreamError)?;
+            .recv_with_fd(&mut self.buffer[self.read_cursor..])
+            .map_err(ConnectionError::StreamReadError)?;
 
         // If the read returned 0 then the client has closed the connection.
         if bytes_read == 0 {
@@ -392,7 +393,7 @@ impl<T: Read + Write> HttpConnection<T> {
                 let mut response_buffer_vec: Vec<u8> = Vec::new();
                 response
                     .write_all(&mut response_buffer_vec)
-                    .map_err(ConnectionError::StreamError)?;
+                    .map_err(ConnectionError::StreamWriteError)?;
                 self.response_buffer = Some(response_buffer_vec);
             } else {
                 return Err(ConnectionError::InvalidWrite);
