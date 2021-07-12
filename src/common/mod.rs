@@ -117,8 +117,10 @@ pub enum ConnectionError {
     InvalidWrite,
     /// The request parsing has failed.
     ParseError(RequestError),
-    /// Could not perform a stream operation successfully.
-    StreamError(std::io::Error),
+    /// Could not perform a read operation from stream successfully.
+    StreamReadError(vmm_sys_util::errno::Error),
+    /// Could not perform a write operation to stream successfully.
+    StreamWriteError(std::io::Error),
 }
 
 impl Display for ConnectionError {
@@ -127,7 +129,8 @@ impl Display for ConnectionError {
             Self::ConnectionClosed => write!(f, "Connection closed."),
             Self::InvalidWrite => write!(f, "Invalid write attempt."),
             Self::ParseError(inner) => write!(f, "Parsing error: {}", inner),
-            Self::StreamError(inner) => write!(f, "Stream error: {}", inner),
+            Self::StreamReadError(inner) => write!(f, "Reading stream error: {}", inner),
+            Self::StreamWriteError(inner) => write!(f, "Writing stream error: {}", inner),
         }
     }
 }
@@ -337,7 +340,10 @@ mod tests {
             match (self, other) {
                 (ParseError(ref e), ParseError(ref other_e)) => e.eq(other_e),
                 (ConnectionClosed, ConnectionClosed) => true,
-                (StreamError(ref e), StreamError(ref other_e)) => {
+                (StreamReadError(ref e), StreamReadError(ref other_e)) => {
+                    format!("{}", e).eq(&format!("{}", other_e))
+                }
+                (StreamWriteError(ref e), StreamWriteError(ref other_e)) => {
                     format!("{}", e).eq(&format!("{}", other_e))
                 }
                 (InvalidWrite, InvalidWrite) => true,
@@ -510,9 +516,9 @@ mod tests {
         assert_eq!(
             format!(
                 "{}",
-                ConnectionError::StreamError(std::io::Error::from_raw_os_error(11))
+                ConnectionError::StreamWriteError(std::io::Error::from_raw_os_error(11))
             ),
-            "Stream error: Resource temporarily unavailable (os error 11)"
+            "Writing stream error: Resource temporarily unavailable (os error 11)"
         );
     }
 
