@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::VecDeque;
+use std::fs::File;
 use std::io::{Read, Write};
 
 use crate::common::ascii::{CR, CRLF_LEN, LF};
@@ -50,6 +51,9 @@ pub struct HttpConnection<T> {
     /// A buffer containing the bytes of a response that is currently
     /// being sent.
     response_buffer: Option<Vec<u8>>,
+    /// The latest file that has been received and which must be associated
+    /// with the pending request.
+    file: Option<File>,
 }
 
 impl<T: Read + Write + ScmSocket> HttpConnection<T> {
@@ -66,6 +70,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             parsed_requests: VecDeque::new(),
             response_queue: VecDeque::new(),
             response_buffer: None,
+            file: None,
         }
     }
 
@@ -107,8 +112,9 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                     // the `parsed_requests` queue.
                     self.state = ConnectionState::WaitingForRequestLine;
                     self.body_bytes_to_be_read = 0;
-                    self.parsed_requests
-                        .push_back(self.pending_request.take().unwrap());
+                    let mut pending_request = self.pending_request.take().unwrap();
+                    pending_request.file = self.file.take();
+                    self.parsed_requests.push_back(pending_request);
                 }
             };
         }
@@ -127,10 +133,15 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
         }
         // Append new bytes to what we already have in the buffer.
         // The slice access is safe, the index is checked above.
-        let (bytes_read, _) = self
+        let (bytes_read, file) = self
             .stream
             .recv_with_fd(&mut self.buffer[self.read_cursor..])
             .map_err(ConnectionError::StreamReadError)?;
+
+        // Update the internal file that must be associated with the request.
+        if file.is_some() {
+            self.file = file;
+        }
 
         // If the read returned 0 then the client has closed the connection.
         if bytes_read == 0 {
@@ -176,6 +187,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                         .map_err(ConnectionError::ParseError)?,
                     headers: Headers::default(),
                     body: None,
+                    file: None,
                 });
                 self.state = ConnectionState::WaitingForHeaders;
                 Ok(true)
@@ -517,6 +529,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
+            file: None,
         };
 
         assert_eq!(request, expected_request);
@@ -553,6 +566,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
+            file: None,
         };
         assert_eq!(request, expected_request);
     }
@@ -586,6 +600,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
+            file: None,
         };
         assert_eq!(request, expected_request);
     }
@@ -650,6 +665,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(1400, true, true),
             body: Some(Body::new(request_body)),
+            file: None,
         };
 
         assert_eq!(request, expected_request);
@@ -720,6 +736,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
+            file: None,
         };
         assert_eq!(request, expected_request);
     }
@@ -741,6 +758,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, false, false),
             body: None,
+            file: None,
         };
         assert_eq!(request, expected_request);
     }
@@ -769,6 +787,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, false, false),
             body: None,
+            file: None,
         };
         assert_eq!(request, expected_request);
 
@@ -787,6 +806,7 @@ mod tests {
             ),
             headers: Headers::new(0, false, false),
             body: None,
+            file: None,
         };
         assert_eq!(request, expected_request);
     }
@@ -814,6 +834,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, false, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
+            file: None,
         };
 
         conn.try_read().unwrap();
@@ -824,6 +845,7 @@ mod tests {
             request_line: RequestLine::new(Method::Put, "http://farhost/away", Version::Http11),
             headers: Headers::new(23, false, false),
             body: Some(Body::new(b"this is another request".to_vec())),
+            file: None,
         };
         assert_eq!(request_first, expected_request_first);
         assert_eq!(request_second, expected_request_second);
@@ -1036,6 +1058,7 @@ mod tests {
             request_line: RequestLine::new(Method::Get, "http://foo/bar", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
+            file: None,
         });
         assert_eq!(
             conn.parse_headers(&mut 0, BUFFER_SIZE).unwrap_err(),
@@ -1093,6 +1116,7 @@ mod tests {
             request_line: RequestLine::new(Method::Get, "http://foo/bar", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
+            file: None,
         });
         conn.body_vec = vec![0xde, 0xad, 0xbe, 0xef];
         assert_eq!(
