@@ -1,6 +1,7 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::fs::File;
 use std::str::from_utf8;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF, SP};
@@ -158,6 +159,8 @@ pub struct Request {
     pub headers: Headers,
     /// The body of the request.
     pub body: Option<Body>,
+    /// The optional file associated with the request.
+    pub file: Option<File>,
 }
 
 impl Request {
@@ -217,6 +220,7 @@ impl Request {
                 request_line,
                 headers: Headers::default(),
                 body: None,
+                file: None,
             }),
             Some(headers_end) => {
                 // Parse the request headers.
@@ -276,6 +280,7 @@ impl Request {
                     request_line,
                     headers,
                     body,
+                    file: None,
                 })
             }
             // If we can't find a CR LF CR LF even though the request should have headers
@@ -444,6 +449,7 @@ mod tests {
                 uri: Uri::new("http://localhost/home"),
             },
             body: None,
+            file: None,
             headers: Headers::default(),
         };
         let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\
