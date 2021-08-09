@@ -22,6 +22,8 @@ pub enum StatusCode {
     NoContent,
     /// 400, Bad Request
     BadRequest,
+    /// 401, Unauthorized
+    Unauthorized,
     /// 404, Not Found
     NotFound,
     /// 405, Method Not Allowed
@@ -42,6 +44,7 @@ impl StatusCode {
             Self::OK => b"200",
             Self::NoContent => b"204",
             Self::BadRequest => b"400",
+            Self::Unauthorized => b"401",
             Self::NotFound => b"404",
             Self::MethodNotAllowed => b"405",
             Self::InternalServerError => b"500",
@@ -369,6 +372,7 @@ mod tests {
         assert_eq!(StatusCode::OK.raw(), b"200");
         assert_eq!(StatusCode::NoContent.raw(), b"204");
         assert_eq!(StatusCode::BadRequest.raw(), b"400");
+        assert_eq!(StatusCode::Unauthorized.raw(), b"401");
         assert_eq!(StatusCode::NotFound.raw(), b"404");
         assert_eq!(StatusCode::MethodNotAllowed.raw(), b"405");
         assert_eq!(StatusCode::InternalServerError.raw(), b"500");
