@@ -84,6 +84,8 @@ pub enum RequestError {
     Overflow,
     /// Underflow occurred when parsing a request.
     Underflow,
+    /// Payload too large.
+    SizeLimitExceeded(usize, usize),
 }
 
 impl Display for RequestError {
@@ -104,6 +106,12 @@ impl Display for RequestError {
             Self::InvalidUri(inner) => write!(f, "Invalid URI: {}", inner),
             Self::Overflow => write!(f, "Overflow occurred when parsing a request."),
             Self::Underflow => write!(f, "Underflow occurred when parsing a request."),
+            Self::SizeLimitExceeded(limit, size) => write!(
+                f,
+                "Request payload with size {} is larger than the limit of {} \
+                 allowed by server.",
+                size, limit
+            ),
         }
     }
 }
@@ -417,6 +425,10 @@ mod tests {
         assert_eq!(
             format!("{}", RequestError::Underflow),
             "Underflow occurred when parsing a request."
+        );
+        assert_eq!(
+            format!("{}", RequestError::SizeLimitExceeded(4, 10)),
+            "Request payload with size 10 is larger than the limit of 4 allowed by server."
         );
     }
 
