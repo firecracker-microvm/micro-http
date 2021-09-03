@@ -21,6 +21,8 @@ static SERVER_FULL_ERROR_MESSAGE: &[u8] = b"HTTP/1.1 503\r\n\
                                             Connection: close\r\n\
                                             Content-Length: 40\r\n\r\n{ \"error\": \"Too many open connections\" }";
 const MAX_CONNECTIONS: usize = 10;
+/// Payload max size
+pub(crate) const MAX_PAYLOAD_SIZE: usize = 51200;
 
 type Result<T> = std::result::Result<T, ServerError>;
 
@@ -259,6 +261,8 @@ pub struct HttpServer {
     /// We use the file descriptor of the stream as the key for mapping
     /// connections because the 1-to-1 relation is guaranteed by the OS.
     connections: HashMap<RawFd, ClientConnection<UnixStream>>,
+    /// Payload max size
+    payload_max_size: usize,
 }
 
 impl HttpServer {
@@ -275,6 +279,7 @@ impl HttpServer {
             socket,
             epoll,
             connections: HashMap::new(),
+            payload_max_size: MAX_PAYLOAD_SIZE,
         })
     }
 
@@ -295,7 +300,14 @@ impl HttpServer {
             socket,
             epoll,
             connections: HashMap::new(),
+            payload_max_size: MAX_PAYLOAD_SIZE,
         })
+    }
+
+    /// This function sets the limit for PUT/PATCH requests. It overwrites the
+    /// default limit of 0.05MiB with the one allowed by server.
+    pub fn set_payload_max_size(&mut self, request_payload_max_size: usize) {
+        self.payload_max_size = request_payload_max_size;
     }
 
     /// Starts the HTTP Server.
@@ -573,12 +585,12 @@ impl HttpServer {
             })
             .and_then(|stream| {
                 // Add the stream to the `epoll` structure and listen for bytes to be read.
-                Self::epoll_add(&self.epoll, stream.as_raw_fd())?;
+                let raw_fd = stream.as_raw_fd();
+                Self::epoll_add(&self.epoll, raw_fd)?;
+                let mut conn = HttpConnection::new(stream);
+                conn.set_payload_max_size(self.payload_max_size);
                 // Then add it to our open connections.
-                self.connections.insert(
-                    stream.as_raw_fd(),
-                    ClientConnection::new(HttpConnection::new(stream)),
-                );
+                self.connections.insert(raw_fd, ClientConnection::new(conn));
                 Ok(())
             })
     }
@@ -674,6 +686,73 @@ mod tests {
 
         let mut buf: [u8; 1024] = [0; 1024];
         assert!(socket.read(&mut buf[..]).unwrap() > 0);
+    }
+
+    #[test]
+    fn test_connection_size_limit_exceeded() {
+        let path_to_socket = get_temp_socket_file();
+
+        let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
+        server.start_server().unwrap();
+
+        // Test one incoming connection.
+        let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
+        assert!(server.requests().unwrap().is_empty());
+
+        socket
+            .write_all(
+                b"PATCH /machine-config HTTP/1.1\r\n\
+                         Content-Length: 51201\r\n\
+                         Content-Type: application/json\r\n\r\naaaaa",
+            )
+            .unwrap();
+        assert!(server.requests().unwrap().is_empty());
+        assert!(server.requests().unwrap().is_empty());
+        let mut buf: [u8; 265] = [0; 265];
+        assert!(socket.read(&mut buf[..]).unwrap() > 0);
+        let error_message = b"HTTP/1.1 400 \r\n\
+                              Server: Firecracker API\r\n\
+                              Connection: keep-alive\r\n\
+                              Content-Type: application/json\r\n\
+                              Content-Length: 149\r\n\r\n{ \"error\": \"\
+                              Request payload with size 51201 is larger than \
+                              the limit of 51200 allowed by server.\nAll \
+                              previous unanswered requests will be dropped.";
+        assert_eq!(&buf[..], &error_message[..]);
+    }
+
+    #[test]
+    fn test_set_payload_size() {
+        let path_to_socket = get_temp_socket_file();
+
+        let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
+        server.start_server().unwrap();
+        server.set_payload_max_size(4);
+
+        // Test one incoming connection.
+        let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
+        assert!(server.requests().unwrap().is_empty());
+
+        socket
+            .write_all(
+                b"PATCH /machine-config HTTP/1.1\r\n\
+                         Content-Length: 5\r\n\
+                         Content-Type: application/json\r\n\r\naaaaa",
+            )
+            .unwrap();
+        assert!(server.requests().unwrap().is_empty());
+        assert!(server.requests().unwrap().is_empty());
+        let mut buf: [u8; 260] = [0; 260];
+        assert!(socket.read(&mut buf[..]).unwrap() > 0);
+        let error_message = b"HTTP/1.1 400 \r\n\
+                              Server: Firecracker API\r\n\
+                              Connection: keep-alive\r\n\
+                              Content-Type: application/json\r\n\
+                              Content-Length: 141\r\n\r\n{ \"error\": \"\
+                              Request payload with size 5 is larger than the \
+                              limit of 4 allowed by server.\nAll previous \
+                              unanswered requests will be dropped.\" }";
+        assert_eq!(&buf[..], &error_message[..]);
     }
 
     #[test]

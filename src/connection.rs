@@ -11,6 +11,7 @@ pub use crate::common::{ConnectionError, HttpHeaderError, RequestError};
 use crate::headers::Headers;
 use crate::request::{find, Request, RequestLine};
 use crate::response::{Response, StatusCode};
+use crate::server::MAX_PAYLOAD_SIZE;
 use vmm_sys_util::sock_ctrl_msg::ScmSocket;
 
 const BUFFER_SIZE: usize = 1024;
@@ -54,6 +55,8 @@ pub struct HttpConnection<T> {
     /// The latest file that has been received and which must be associated
     /// with the pending request.
     file: Option<File>,
+    /// Optional payload max size.
+    payload_max_size: usize,
 }
 
 impl<T: Read + Write + ScmSocket> HttpConnection<T> {
@@ -71,7 +74,14 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             response_queue: VecDeque::new(),
             response_buffer: None,
             file: None,
+            payload_max_size: MAX_PAYLOAD_SIZE,
         }
+    }
+
+    /// This function sets the limit for PUT/PATCH requests. It overwrites the
+    /// default limit of 0.05MiB with the one allowed by server.
+    pub fn set_payload_max_size(&mut self, request_payload_max_size: usize) {
+        self.payload_max_size = request_payload_max_size;
     }
 
     /// Tries to read new bytes from the stream and automatically update the request.
@@ -245,6 +255,14 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                 if request.headers.content_length() == 0 {
                     self.state = ConnectionState::RequestReady;
                 } else {
+                    if request.headers.content_length() as usize > self.payload_max_size {
+                        return Err(ConnectionError::ParseError(
+                            RequestError::SizeLimitExceeded(
+                                self.payload_max_size,
+                                request.headers.content_length() as usize,
+                            ),
+                        ));
+                    }
                     if request.headers.expect() {
                         // Send expect.
                         let expect_response =
@@ -504,6 +522,7 @@ mod tests {
 
     use super::*;
     use crate::common::{Method, Version};
+    use crate::server::MAX_PAYLOAD_SIZE;
 
     #[test]
     fn test_try_read_expect() {
@@ -930,6 +949,24 @@ mod tests {
                 "Content-Length".to_string(),
                 " -1".to_string()
             )))
+        );
+    }
+
+    #[test]
+    fn test_payload_size_limit() {
+        let (mut sender, receiver) = UnixStream::pair().unwrap();
+        receiver.set_nonblocking(true).expect("Can't modify socket");
+        let mut conn = HttpConnection::new(receiver);
+        conn.set_payload_max_size(5);
+        sender
+            .write_all(
+                b"PUT http://localhost/home HTTP/1.1\r\n\
+                                 Content-Length: 51200\r\n\r\naaaaaa",
+            )
+            .unwrap();
+        assert_eq!(
+            conn.try_read().unwrap_err(),
+            ConnectionError::ParseError(RequestError::SizeLimitExceeded(5, MAX_PAYLOAD_SIZE))
         );
     }
 
