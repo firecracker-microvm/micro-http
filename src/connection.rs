@@ -4,6 +4,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::os::unix::io::AsRawFd;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF};
 use crate::common::Body;
@@ -54,7 +55,9 @@ pub struct HttpConnection<T> {
     response_buffer: Option<Vec<u8>>,
     /// The latest file that has been received and which must be associated
     /// with the pending request.
-    file: Option<File>,
+    rx_file: Option<File>,
+    /// The enqueued file that should be sent with contents of `response_buffer`.
+    tx_file: Option<File>,
     /// Optional payload max size.
     payload_max_size: usize,
 }
@@ -73,7 +76,8 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             parsed_requests: VecDeque::new(),
             response_queue: VecDeque::new(),
             response_buffer: None,
-            file: None,
+            rx_file: None,
+            tx_file: None,
             payload_max_size: MAX_PAYLOAD_SIZE,
         }
     }
@@ -123,7 +127,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                     self.state = ConnectionState::WaitingForRequestLine;
                     self.body_bytes_to_be_read = 0;
                     let mut pending_request = self.pending_request.take().unwrap();
-                    pending_request.file = self.file.take();
+                    pending_request.file = self.rx_file.take();
                     self.parsed_requests.push_back(pending_request);
                 }
             };
@@ -150,7 +154,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
 
         // Update the internal file that must be associated with the request.
         if file.is_some() {
-            self.file = file;
+            self.rx_file = file;
         }
 
         // If the read returned 0 then the client has closed the connection.
@@ -419,12 +423,13 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
     /// empty outgoing buffer.
     pub fn try_write(&mut self) -> Result<(), ConnectionError> {
         if self.response_buffer.is_none() {
-            if let Some(response) = self.response_queue.pop_front() {
+            if let Some(mut response) = self.response_queue.pop_front() {
                 let mut response_buffer_vec: Vec<u8> = Vec::new();
                 response
                     .write_all(&mut response_buffer_vec)
                     .map_err(ConnectionError::StreamWriteError)?;
                 self.response_buffer = Some(response_buffer_vec);
+                self.tx_file = response.file.take();
             } else {
                 return Err(ConnectionError::InvalidWrite);
             }
@@ -435,7 +440,17 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
 
         if let Some(response_buffer_vec) = self.response_buffer.as_mut() {
             let bytes_to_be_written = response_buffer_vec.len();
-            match self.stream.write(response_buffer_vec.as_slice()) {
+            let write_result = match self.tx_file.take() {
+                Some(file) => self
+                    .stream
+                    .send_with_fd(response_buffer_vec.as_slice(), file.as_raw_fd())
+                    .map_err(|e| std::io::Error::from_raw_os_error(e.errno())),
+                None => self.stream.write(response_buffer_vec.as_slice()),
+            };
+            // FIXME: need to handle `sendmsg` specific errors introduced by ScmSocket.
+            // Will also probably need custom logic for splitting a response that's
+            // too big into smaller chunks since `sendmsg` sends all or nothing.
+            match write_result {
                 Ok(0) => connection_closed = true,
                 Ok(bytes_written) => {
                     if bytes_written != bytes_to_be_written {

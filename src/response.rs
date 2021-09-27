@@ -1,6 +1,7 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::fs::File;
 use std::io::{Error as WriteError, Write};
 
 use crate::ascii::{COLON, CR, LF, SP};
@@ -188,11 +189,21 @@ impl ResponseHeaders {
 /// the body is initialized to `None` and the header is initialized with the `default` value. The body
 /// can be updated with a call to `set_body`. The header can be updated with `set_content_type` and
 /// `set_server`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Response {
     status_line: StatusLine,
     headers: ResponseHeaders,
     body: Option<Body>,
+    /// The optional file associated with the response.
+    pub file: Option<File>,
+}
+
+impl PartialEq for Response {
+    fn eq(&self, other: &Self) -> bool {
+        self.status_line == other.status_line
+            && self.headers == other.headers
+            && self.body == other.body
+    }
 }
 
 impl Response {
@@ -202,6 +213,7 @@ impl Response {
             status_line: StatusLine::new(http_version, status_code),
             headers: ResponseHeaders::default(),
             body: Default::default(),
+            file: None,
         }
     }
 
