@@ -1,8 +1,8 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::fs::File;
 use std::io::{Error as WriteError, Write};
+use std::os::unix::io::RawFd;
 
 use crate::ascii::{COLON, CR, LF, SP};
 use crate::common::{Body, Version};
@@ -194,8 +194,8 @@ pub struct Response {
     status_line: StatusLine,
     headers: ResponseHeaders,
     body: Option<Body>,
-    /// The optional file associated with the response.
-    pub file: Option<File>,
+    /// The optional file descriptor associated with the response.
+    pub file: Option<RawFd>,
 }
 
 impl PartialEq for Response {

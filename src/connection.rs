@@ -4,7 +4,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::RawFd;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF};
 use crate::common::Body;
@@ -56,8 +56,8 @@ pub struct HttpConnection<T> {
     /// The latest file that has been received and which must be associated
     /// with the pending request.
     rx_file: Option<File>,
-    /// The enqueued file that should be sent with contents of `response_buffer`.
-    tx_file: Option<File>,
+    /// The enqueued file descriptor that should be sent with contents of `response_buffer`.
+    tx_file: Option<RawFd>,
     /// Optional payload max size.
     payload_max_size: usize,
 }
@@ -441,9 +441,9 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
         if let Some(response_buffer_vec) = self.response_buffer.as_mut() {
             let bytes_to_be_written = response_buffer_vec.len();
             let write_result = match self.tx_file.take() {
-                Some(file) => self
+                Some(raw_fd) => self
                     .stream
-                    .send_with_fd(response_buffer_vec.as_slice(), file.as_raw_fd())
+                    .send_with_fd(response_buffer_vec.as_slice(), raw_fd)
                     .map_err(|e| std::io::Error::from_raw_os_error(e.errno())),
                 None => self.stream.write(response_buffer_vec.as_slice()),
             };
