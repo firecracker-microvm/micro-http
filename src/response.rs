@@ -88,6 +88,7 @@ impl StatusLine {
 pub struct ResponseHeaders {
     content_length: i32,
     content_type: MediaType,
+    deprecation: bool,
     server: String,
     allow: Vec<Method>,
     accept_encoding: bool,
@@ -98,6 +99,7 @@ impl Default for ResponseHeaders {
         Self {
             content_length: Default::default(),
             content_type: Default::default(),
+            deprecation: false,
             server: String::from("Firecracker API"),
             allow: Vec::new(),
             accept_encoding: false,
@@ -126,6 +128,16 @@ impl ResponseHeaders {
         buf.write_all(&[CR, LF])
     }
 
+    // The logic pertaining to `Deprecation` header writing.
+    fn write_deprecation_header<T: Write>(&self, buf: &mut T) -> Result<(), WriteError> {
+        if !self.deprecation {
+            return Ok(());
+        }
+
+        buf.write_all(b"Deprecation: true")?;
+        buf.write_all(&[CR, LF])
+    }
+
     /// Writes the headers to `buf` using the HTTP specification.
     pub fn write_all<T: Write>(&self, buf: &mut T) -> Result<(), WriteError> {
         buf.write_all(Header::Server.raw())?;
@@ -137,6 +149,7 @@ impl ResponseHeaders {
         buf.write_all(&[CR, LF])?;
 
         self.write_allow_header(buf)?;
+        self.write_deprecation_header(buf)?;
 
         if self.content_length != 0 {
             buf.write_all(Header::ContentType.raw())?;
@@ -173,6 +186,13 @@ impl ResponseHeaders {
     /// Sets the content type to be written in the HTTP response.
     pub fn set_content_type(&mut self, content_type: MediaType) {
         self.content_type = content_type;
+    }
+
+    /// Sets the `Deprecation` header to be written in the HTTP response.
+    /// https://tools.ietf.org/id/draft-dalal-deprecation-header-03.html
+    #[allow(unused)]
+    pub fn set_deprecation(&mut self) {
+        self.deprecation = true;
     }
 
     /// Sets the encoding type to be written in the HTTP response.
@@ -217,6 +237,11 @@ impl Response {
     /// Updates the content type of the `Response`.
     pub fn set_content_type(&mut self, content_type: MediaType) {
         self.headers.set_content_type(content_type);
+    }
+
+    /// Marks the `Response` as deprecated.
+    pub fn set_deprecation(&mut self) {
+        self.headers.set_deprecation();
     }
 
     /// Updates the encoding type of `Response`.
@@ -277,6 +302,11 @@ impl Response {
     /// Returns the Content Type of the response.
     pub fn content_type(&self) -> MediaType {
         self.headers.content_type
+    }
+
+    /// Returns the deprecation status of the response.
+    pub fn deprecation(&self) -> bool {
+        self.headers.deprecation
     }
 
     /// Returns the HTTP Version of the response.
@@ -390,6 +420,54 @@ mod tests {
         response.allow_method(Method::Get);
         response.allow_method(Method::Put);
         assert_eq!(response.allow(), vec![Method::Get, Method::Put]);
+    }
+
+    #[test]
+    fn test_deprecation() {
+        // Test a deprecated response with body.
+        let mut response = Response::new(Version::Http10, StatusCode::OK);
+        let body = "This is a test";
+        response.set_body(Body::new(body));
+        response.set_content_type(MediaType::PlainText);
+        response.set_encoding();
+        response.set_deprecation();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.body().unwrap(), Body::new(body));
+        assert_eq!(response.http_version(), Version::Http10);
+        assert_eq!(response.content_length(), 14);
+        assert_eq!(response.content_type(), MediaType::PlainText);
+        assert!(response.deprecation());
+
+        let expected_response: &'static [u8] = b"HTTP/1.0 200 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\
+            Deprecation: true\r\n\
+            Content-Type: text/plain\r\n\
+            Content-Length: 14\r\n\
+            Accept-Encoding: identity\r\n\r\n\
+            This is a test";
+
+        let mut response_buf: [u8; 172] = [0; 172];
+        assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
+        assert_eq!(response_buf.as_ref(), expected_response);
+
+        // Test a deprecated response without a body.
+        let mut response = Response::new(Version::Http10, StatusCode::NoContent);
+        response.set_deprecation();
+
+        assert_eq!(response.status(), StatusCode::NoContent);
+        assert_eq!(response.http_version(), Version::Http10);
+        assert!(response.deprecation());
+
+        let expected_response: &'static [u8] = b"HTTP/1.0 204 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\
+            Deprecation: true\r\n\r\n";
+
+        let mut response_buf: [u8; 85] = [0; 85];
+        assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
+        assert_eq!(response_buf.as_ref(), expected_response);
     }
 
     #[test]
