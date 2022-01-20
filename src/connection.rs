@@ -4,6 +4,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::os::unix::io::FromRawFd;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF};
 use crate::common::Body;
@@ -15,6 +16,7 @@ use crate::server::MAX_PAYLOAD_SIZE;
 use vmm_sys_util::sock_ctrl_msg::ScmSocket;
 
 const BUFFER_SIZE: usize = 1024;
+const SCM_MAX_FD: usize = 253;
 
 /// Describes the state machine of an HTTP connection.
 enum ConnectionState {
@@ -52,9 +54,9 @@ pub struct HttpConnection<T> {
     /// A buffer containing the bytes of a response that is currently
     /// being sent.
     response_buffer: Option<Vec<u8>>,
-    /// The latest file that has been received and which must be associated
+    /// The list of files that has been received and which must be associated
     /// with the pending request.
-    file: Option<File>,
+    files: Vec<File>,
     /// Optional payload max size.
     payload_max_size: usize,
 }
@@ -73,7 +75,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             parsed_requests: VecDeque::new(),
             response_queue: VecDeque::new(),
             response_buffer: None,
-            file: None,
+            files: Vec::new(),
             payload_max_size: MAX_PAYLOAD_SIZE,
         }
     }
@@ -123,7 +125,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                     self.state = ConnectionState::WaitingForRequestLine;
                     self.body_bytes_to_be_read = 0;
                     let mut pending_request = self.pending_request.take().unwrap();
-                    pending_request.file = self.file.take();
+                    pending_request.files = self.files.drain(..).collect();
                     self.parsed_requests.push_back(pending_request);
                 }
             };
@@ -143,15 +145,11 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
         }
         // Append new bytes to what we already have in the buffer.
         // The slice access is safe, the index is checked above.
-        let (bytes_read, file) = self
-            .stream
-            .recv_with_fd(&mut self.buffer[self.read_cursor..])
-            .map_err(ConnectionError::StreamReadError)?;
+        let (bytes_read, new_files) = self.recv_with_fds()?;
 
-        // Update the internal file that must be associated with the request.
-        if file.is_some() {
-            self.file = file;
-        }
+        // Update the internal list of files that must be associated with the
+        // request.
+        self.files.extend(new_files);
 
         // If the read returned 0 then the client has closed the connection.
         if bytes_read == 0 {
@@ -160,6 +158,43 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
         bytes_read
             .checked_add(self.read_cursor)
             .ok_or(ConnectionError::ParseError(RequestError::Overflow))
+    }
+
+    /// Receive data along with optional files descriptors.
+    /// It is a wrapper around the same function from vmm-sys-util.
+    ///
+    /// # Errors
+    /// `StreamError` is returned if any error occurred while reading the stream.
+    fn recv_with_fds(&mut self) -> Result<(usize, Vec<File>), ConnectionError> {
+        let buf = &mut self.buffer[self.read_cursor..];
+        // We must allocate the maximum number of receivable file descriptors
+        // if don't want to miss any of them. Allocating a too small number
+        // would lead to the incapacity of receiving the file descriptors.
+        let mut fds = [0; SCM_MAX_FD];
+        let mut iovecs = [libc::iovec {
+            iov_base: buf.as_mut_ptr() as *mut libc::c_void,
+            iov_len: buf.len(),
+        }];
+
+        // Safe because we have mutably borrowed buf and it's safe to write
+        // arbitrary data to a slice.
+        let (read_count, fd_count) = unsafe {
+            self.stream
+                .recv_with_fds(&mut iovecs, &mut fds)
+                .map_err(ConnectionError::StreamReadError)?
+        };
+
+        Ok((
+            read_count,
+            fds.iter()
+                .take(fd_count)
+                .map(|fd| {
+                    // Safe because all fds are owned by us after they have been
+                    // received through the socket.
+                    unsafe { File::from_raw_fd(*fd) }
+                })
+                .collect(),
+        ))
     }
 
     /// Parses bytes in `buffer` for a valid request line.
@@ -197,7 +232,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
                         .map_err(ConnectionError::ParseError)?,
                     headers: Headers::default(),
                     body: None,
-                    file: None,
+                    files: Vec::new(),
                 });
                 self.state = ConnectionState::WaitingForHeaders;
                 Ok(true)
@@ -517,12 +552,16 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Seek, SeekFrom};
     use std::net::Shutdown;
+    use std::os::unix::io::IntoRawFd;
     use std::os::unix::net::UnixStream;
 
     use super::*;
     use crate::common::{Method, Version};
     use crate::server::MAX_PAYLOAD_SIZE;
+
+    use vmm_sys_util::tempfile::TempFile;
 
     #[test]
     fn test_try_read_expect() {
@@ -548,7 +587,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
-            file: None,
+            files: Vec::new(),
         };
 
         assert_eq!(request, expected_request);
@@ -585,7 +624,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
     }
@@ -619,7 +658,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, true, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
     }
@@ -684,7 +723,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(1400, true, true),
             body: Some(Body::new(request_body)),
-            file: None,
+            files: Vec::new(),
         };
 
         assert_eq!(request, expected_request);
@@ -755,7 +794,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
     }
@@ -777,7 +816,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, false, false),
             body: None,
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
     }
@@ -806,7 +845,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(0, false, false),
             body: None,
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
 
@@ -825,7 +864,7 @@ mod tests {
             ),
             headers: Headers::new(0, false, false),
             body: None,
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request, expected_request);
     }
@@ -853,7 +892,7 @@ mod tests {
             request_line: RequestLine::new(Method::Patch, "http://localhost/home", Version::Http11),
             headers: Headers::new(26, false, true),
             body: Some(Body::new(b"this is not\n\r\na json \nbody".to_vec())),
-            file: None,
+            files: Vec::new(),
         };
 
         conn.try_read().unwrap();
@@ -864,7 +903,7 @@ mod tests {
             request_line: RequestLine::new(Method::Put, "http://farhost/away", Version::Http11),
             headers: Headers::new(23, false, false),
             body: Some(Body::new(b"this is another request".to_vec())),
-            file: None,
+            files: Vec::new(),
         };
         assert_eq!(request_first, expected_request_first);
         assert_eq!(request_second, expected_request_second);
@@ -1000,6 +1039,77 @@ mod tests {
     }
 
     #[test]
+    fn test_read_bytes_with_files() {
+        let (sender, receiver) = UnixStream::pair().unwrap();
+        receiver.set_nonblocking(true).expect("Can't modify socket");
+        let mut conn = HttpConnection::new(receiver);
+
+        // Create 3 files, edit the content and rewind back to the start.
+        let mut file1 = TempFile::new().unwrap().into_file();
+        let mut file2 = TempFile::new().unwrap().into_file();
+        let mut file3 = TempFile::new().unwrap().into_file();
+        file1.write(b"foo").unwrap();
+        file1.seek(SeekFrom::Start(0)).unwrap();
+        file2.write(b"bar").unwrap();
+        file2.seek(SeekFrom::Start(0)).unwrap();
+        file3.write(b"foobar").unwrap();
+        file3.seek(SeekFrom::Start(0)).unwrap();
+
+        // Send 2 file descriptors along with 3 bytes of data.
+        assert_eq!(
+            sender.send_with_fds(
+                &[[1, 2, 3].as_ref()],
+                &[file1.into_raw_fd(), file2.into_raw_fd()]
+            ),
+            Ok(3)
+        );
+
+        // Check we receive the right amount of data along with the right
+        // amount of file descriptors.
+        assert_eq!(conn.read_bytes(), Ok(3));
+        assert_eq!(conn.files.len(), 2);
+
+        // Check the content of the data received
+        assert_eq!(conn.buffer[0], 1);
+        assert_eq!(conn.buffer[1], 2);
+        assert_eq!(conn.buffer[2], 3);
+
+        // Check the file descriptors are usable by checking the content that
+        // can be read.
+        let mut buf = [0; 10];
+        assert_eq!(conn.files[0].read(&mut buf).unwrap(), 3);
+        assert_eq!(&buf[..3], b"foo");
+        assert_eq!(conn.files[1].read(&mut buf).unwrap(), 3);
+        assert_eq!(&buf[..3], b"bar");
+
+        // Send the 3rd file descriptor along with 1 byte of data.
+        assert_eq!(
+            sender.send_with_fds(&[[10].as_ref()], &[file3.into_raw_fd()]),
+            Ok(1)
+        );
+
+        // Check the amount of data along with the amount of file descriptors
+        // are updated.
+        assert_eq!(conn.read_bytes(), Ok(1));
+        assert_eq!(conn.files.len(), 3);
+
+        // Check the content of the new data received
+        assert_eq!(conn.buffer[0], 10);
+
+        // Check the latest file descriptor is usable by checking the content
+        // that can be read.
+        let mut buf = [0; 10];
+        assert_eq!(conn.files[2].read(&mut buf).unwrap(), 6);
+        assert_eq!(&buf[..6], b"foobar");
+
+        sender.shutdown(Shutdown::Write).unwrap();
+        assert_eq!(
+            conn.read_bytes().unwrap_err(),
+            ConnectionError::ConnectionClosed
+        );
+    }
+
+    #[test]
     fn test_shift_buffer_left() {
         let (_, receiver) = UnixStream::pair().unwrap();
         let mut conn = HttpConnection::new(receiver);
@@ -1095,7 +1205,7 @@ mod tests {
             request_line: RequestLine::new(Method::Get, "http://foo/bar", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
-            file: None,
+            files: Vec::new(),
         });
         assert_eq!(
             conn.parse_headers(&mut 0, BUFFER_SIZE).unwrap_err(),
@@ -1153,7 +1263,7 @@ mod tests {
             request_line: RequestLine::new(Method::Get, "http://foo/bar", Version::Http11),
             headers: Headers::new(0, true, true),
             body: None,
-            file: None,
+            files: Vec::new(),
         });
         conn.body_vec = vec![0xde, 0xad, 0xbe, 0xef];
         assert_eq!(
