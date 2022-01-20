@@ -159,8 +159,8 @@ pub struct Request {
     pub headers: Headers,
     /// The body of the request.
     pub body: Option<Body>,
-    /// The optional file associated with the request.
-    pub file: Option<File>,
+    /// The optional files associated with the request.
+    pub files: Vec<File>,
 }
 
 impl Request {
@@ -220,7 +220,7 @@ impl Request {
                 request_line,
                 headers: Headers::default(),
                 body: None,
-                file: None,
+                files: Vec::new(),
             }),
             Some(headers_end) => {
                 // Parse the request headers.
@@ -280,7 +280,7 @@ impl Request {
                     request_line,
                     headers,
                     body,
-                    file: None,
+                    files: Vec::new(),
                 })
             }
             // If we can't find a CR LF CR LF even though the request should have headers
@@ -449,7 +449,7 @@ mod tests {
                 uri: Uri::new("http://localhost/home"),
             },
             body: None,
-            file: None,
+            files: Vec::new(),
             headers: Headers::default(),
         };
         let request_bytes = b"GET http://localhost/home HTTP/1.0\r\n\
