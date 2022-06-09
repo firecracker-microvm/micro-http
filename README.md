@@ -1,11 +1,13 @@
 # micro-http
 
-This is a minimal implementation of the
+This is a minimal implementation of the 
 [HTTP/1.0](https://tools.ietf.org/html/rfc1945) and
 [HTTP/1.1](https://www.ietf.org/rfc/rfc2616.txt) protocols. This HTTP
 implementation is stateless thus it does not support chunking or compression.
 
 The micro-http implementation is used in production by Firecracker.
+
+As micro-http uses [`std::os::unix`](https://doc.rust-lang.org/std/os/unix/index.html) this crates only supports Unix-like targets.
 
 ## Contributing
 
