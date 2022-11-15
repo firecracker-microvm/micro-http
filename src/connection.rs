@@ -176,7 +176,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             iov_len: buf.len(),
         }];
 
-        // Safe because we have mutably borrowed buf and it's safe to write
+        // SAFETY: Safe because we have mutably borrowed buf and it's safe to write
         // arbitrary data to a slice.
         let (read_count, fd_count) = unsafe {
             self.stream
@@ -189,7 +189,7 @@ impl<T: Read + Write + ScmSocket> HttpConnection<T> {
             fds.iter()
                 .take(fd_count)
                 .map(|fd| {
-                    // Safe because all fds are owned by us after they have been
+                    // SAFETY: Safe because all fds are owned by us after they have been
                     // received through the socket.
                     unsafe { File::from_raw_fd(*fd) }
                 })
@@ -1048,11 +1048,11 @@ mod tests {
         let mut file1 = TempFile::new().unwrap().into_file();
         let mut file2 = TempFile::new().unwrap().into_file();
         let mut file3 = TempFile::new().unwrap().into_file();
-        file1.write(b"foo").unwrap();
+        file1.write_all(b"foo").unwrap();
         file1.seek(SeekFrom::Start(0)).unwrap();
-        file2.write(b"bar").unwrap();
+        file2.write_all(b"bar").unwrap();
         file2.seek(SeekFrom::Start(0)).unwrap();
-        file3.write(b"foobar").unwrap();
+        file3.write_all(b"foobar").unwrap();
         file3.seek(SeekFrom::Start(0)).unwrap();
 
         // Send 2 file descriptors along with 3 bytes of data.
