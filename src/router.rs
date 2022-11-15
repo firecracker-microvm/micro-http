@@ -92,7 +92,7 @@ impl<T: Send> HttpRoutes<T> {
             request.uri().get_abs_path()
         );
         let mut response = match self.routes.get(&path) {
-            Some(route) => route.handle_request(&request, &argument),
+            Some(route) => route.handle_request(request, argument),
             None => Response::new(Version::Http11, StatusCode::NotFound),
         };
 
