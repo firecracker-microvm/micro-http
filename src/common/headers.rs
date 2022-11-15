@@ -131,8 +131,12 @@ impl Headers {
     /// use micro_http::Headers;
     ///
     /// let mut request_header = Headers::default();
-    /// assert!(request_header.parse_header_line(b"Content-Length: 24").is_ok());
-    /// assert!(request_header.parse_header_line(b"Content-Length: 24: 2").is_err());
+    /// assert!(request_header
+    ///     .parse_header_line(b"Content-Length: 24")
+    ///     .is_ok());
+    /// assert!(request_header
+    ///     .parse_header_line(b"Content-Length: 24: 2")
+    ///     .is_err());
     /// ```
     pub fn parse_header_line(&mut self, header_line: &[u8]) -> Result<(), RequestError> {
         // Headers must be ASCII, so also UTF-8 valid.

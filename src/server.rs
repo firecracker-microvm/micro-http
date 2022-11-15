@@ -492,12 +492,13 @@ impl HttpServer {
     /// server.start_server().unwrap();
     ///
     /// // Add our server to the `epoll` manager.
-    /// epoll.ctl(
-    ///     epoll::ControlOperation::Add,
-    ///     server.epoll().as_raw_fd(),
-    ///     epoll::EpollEvent::new(epoll::EventSet::IN, 1234u64),
-    /// )
-    /// .unwrap();
+    /// epoll
+    ///     .ctl(
+    ///         epoll::ControlOperation::Add,
+    ///         server.epoll().as_raw_fd(),
+    ///         epoll::EpollEvent::new(epoll::EventSet::IN, 1234u64),
+    ///     )
+    ///     .unwrap();
     ///
     /// // Connect a client to the server so it doesn't block in our example.
     /// let mut socket = std::os::unix::net::UnixStream::connect(path_to_socket).unwrap();
