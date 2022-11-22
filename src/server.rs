@@ -133,7 +133,7 @@ impl<T: Read + Write + ScmSocket> ClientConnection<T> {
                 let mut error_response = Response::new(Version::Http11, StatusCode::BadRequest);
                 error_response.set_body(Body::new(format!(
                     "{{ \"error\": \"{}\nAll previous unanswered requests will be dropped.\" }}",
-                    inner.to_string()
+                    inner
                 )));
                 self.connection.enqueue_response(error_response);
             }
@@ -285,16 +285,17 @@ impl HttpServer {
 
     /// Constructor for `HttpServer`.
     ///
-    /// Note that this function requires the socket_fd to be solely owned
+    /// Returns the newly formed `HttpServer`.
+    ///
+    /// # Safety
+    /// This function requires the socket_fd to be solely owned
     /// and not be associated with another File in the caller as it uses
     /// the unsafe `UnixListener::from_raw_fd method`.
     ///
-    /// Returns the newly formed `HttpServer`.
-    ///
     /// # Errors
     /// Returns an `IOError` when `epoll::create` fails.
-    pub fn new_from_fd(socket_fd: RawFd) -> Result<Self> {
-        let socket = unsafe { UnixListener::from_raw_fd(socket_fd) };
+    pub unsafe fn new_from_fd(socket_fd: RawFd) -> Result<Self> {
+        let socket = UnixListener::from_raw_fd(socket_fd);
         let epoll = epoll::Epoll::new().map_err(ServerError::IOError)?;
         Ok(HttpServer {
             socket,
@@ -492,12 +493,13 @@ impl HttpServer {
     /// server.start_server().unwrap();
     ///
     /// // Add our server to the `epoll` manager.
-    /// epoll.ctl(
-    ///     epoll::ControlOperation::Add,
-    ///     server.epoll().as_raw_fd(),
-    ///     epoll::EpollEvent::new(epoll::EventSet::IN, 1234u64),
-    /// )
-    /// .unwrap();
+    /// epoll
+    ///     .ctl(
+    ///         epoll::ControlOperation::Add,
+    ///         server.epoll().as_raw_fd(),
+    ///         epoll::EpollEvent::new(epoll::EventSet::IN, 1234u64),
+    ///     )
+    ///     .unwrap();
     ///
     /// // Connect a client to the server so it doesn't block in our example.
     /// let mut socket = std::os::unix::net::UnixStream::connect(path_to_socket).unwrap();
@@ -638,6 +640,8 @@ impl HttpServer {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
     use super::*;
     use std::io::{Read, Write};
     use std::net::Shutdown;
@@ -763,7 +767,7 @@ mod tests {
         let socket_listener = UnixListener::bind(path_to_socket.as_path()).unwrap();
         let socket_fd = socket_listener.into_raw_fd();
 
-        let mut server = HttpServer::new_from_fd(socket_fd).unwrap();
+        let mut server = unsafe { HttpServer::new_from_fd(socket_fd).unwrap() };
         server.start_server().unwrap();
 
         // Test one incoming connection.

@@ -26,7 +26,7 @@ pub(crate) fn find(bytes: &[u8], sequence: &[u8]) -> Option<usize> {
 /// Wrapper over HTTP URIs.
 ///
 /// The `Uri` can not be used directly and it is only accessible from an HTTP Request.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Uri {
     string: String,
 }
@@ -85,7 +85,7 @@ impl Uri {
 }
 
 /// Wrapper over an HTTP Request Line.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RequestLine {
     method: Method,
     uri: Uri,
@@ -505,8 +505,8 @@ mod tests {
         assert_eq!(request.uri(), &Uri::new("http://localhost/home"));
         assert_eq!(request.http_version(), Version::Http11);
         assert_eq!(request.method(), Method::Patch);
-        assert_eq!(request.headers.chunked(), true);
-        assert_eq!(request.headers.expect(), true);
+        assert!(request.headers.chunked());
+        assert!(request.headers.expect());
         assert_eq!(request.headers.content_length(), 26);
         assert_eq!(
             request.body.unwrap().body,
@@ -539,8 +539,8 @@ mod tests {
         assert_eq!(request.uri(), &Uri::new("http://localhost/"));
         assert_eq!(request.http_version(), Version::Http10);
         assert_eq!(request.method(), Method::Get);
-        assert_eq!(request.headers.chunked(), false);
-        assert_eq!(request.headers.expect(), false);
+        assert!(!request.headers.chunked());
+        assert!(!request.headers.expect());
         assert_eq!(request.headers.content_length(), 0);
         assert!(request.body.is_none());
 
