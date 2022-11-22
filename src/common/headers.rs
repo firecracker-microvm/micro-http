@@ -78,7 +78,7 @@ impl Header {
 /// invalidate our request as we don't support the full set of HTTP/1.1 specification.
 /// Such header entries are "Transfer-Encoding: identity; q=0", which means a compression
 /// algorithm is applied to the body of the request, or "Expect: 103-checkpoint".
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Headers {
     /// The `Content-Length` header field tells us how many bytes we need to receive
     /// from the source after the headers.
@@ -131,8 +131,12 @@ impl Headers {
     /// use micro_http::Headers;
     ///
     /// let mut request_header = Headers::default();
-    /// assert!(request_header.parse_header_line(b"Content-Length: 24").is_ok());
-    /// assert!(request_header.parse_header_line(b"Content-Length: 24: 2").is_err());
+    /// assert!(request_header
+    ///     .parse_header_line(b"Content-Length: 24")
+    ///     .is_ok());
+    /// assert!(request_header
+    ///     .parse_header_line(b"Content-Length: 24: 2")
+    ///     .is_err());
     /// ```
     pub fn parse_header_line(&mut self, header_line: &[u8]) -> Result<(), RequestError> {
         // Headers must be ASCII, so also UTF-8 valid.
@@ -306,7 +310,7 @@ impl Headers {
 }
 
 /// Wrapper over supported AcceptEncoding.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Encoding {}
 
 impl Encoding {
@@ -363,7 +367,7 @@ impl Encoding {
 }
 
 /// Wrapper over supported Media Types.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MediaType {
     /// Media Type: "text/plain".
     PlainText,
@@ -446,8 +450,8 @@ mod tests {
     fn test_default() {
         let headers = Headers::default();
         assert_eq!(headers.content_length(), 0);
-        assert_eq!(headers.chunked(), false);
-        assert_eq!(headers.expect(), false);
+        assert!(!headers.chunked());
+        assert!(!headers.expect());
         assert_eq!(headers.accept(), MediaType::PlainText);
         assert_eq!(headers.custom_entries(), &HashMap::default());
     }

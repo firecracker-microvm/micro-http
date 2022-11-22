@@ -63,9 +63,7 @@ impl<T: Send> HttpRoutes<T> {
     ///
     /// ```
     /// extern crate micro_http;
-    /// use micro_http::{
-    ///     EndpointHandler, HttpRoutes, Method, StatusCode, Request, Response, Version
-    /// };
+    /// use micro_http::{EndpointHandler, HttpRoutes, Method, Request, Response, StatusCode, Version};
     ///
     /// struct HandlerArg(bool);
     /// struct MockHandler {}
@@ -77,7 +75,9 @@ impl<T: Send> HttpRoutes<T> {
     ///
     /// let mut router = HttpRoutes::new("Mock_Server".to_string(), "/api/v1".to_string());
     /// let handler = MockHandler {};
-    /// router.add_route(Method::Get, "/func1".to_string(), Box::new(handler)).unwrap();
+    /// router
+    ///     .add_route(Method::Get, "/func1".to_string(), Box::new(handler))
+    ///     .unwrap();
     ///
     /// let request_bytes = b"GET http://localhost/api/v1/func1 HTTP/1.1\r\n\r\n";
     /// let request = Request::try_from(request_bytes, None).unwrap();
@@ -92,7 +92,7 @@ impl<T: Send> HttpRoutes<T> {
             request.uri().get_abs_path()
         );
         let mut response = match self.routes.get(&path) {
-            Some(route) => route.handle_request(&request, &argument),
+            Some(route) => route.handle_request(request, argument),
             None => Response::new(Version::Http11, StatusCode::NotFound),
         };
 
