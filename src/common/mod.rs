@@ -166,12 +166,14 @@ pub enum ServerError {
     ConnectionError(ConnectionError),
     /// Epoll operations failed.
     IOError(std::io::Error),
-    /// Overflow occured while processing messages.
+    /// Overflow occurred while processing messages.
     Overflow,
     /// Server maximum capacity has been reached.
     ServerFull,
-    /// Underflow occured while processing mesagges.
+    /// Underflow occurred while processing messages.
     Underflow,
+    /// Shutdown requested.
+    ShutdownEvent,
 }
 
 impl Display for ServerError {
@@ -182,6 +184,7 @@ impl Display for ServerError {
             Self::Overflow => write!(f, "Overflow occured while processing messages."),
             Self::ServerFull => write!(f, "Server is full."),
             Self::Underflow => write!(f, "Underflow occured while processing messages."),
+            Self::ShutdownEvent => write!(f, "Shutdown requested."),
         }
     }
 }

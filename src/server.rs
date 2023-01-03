@@ -12,9 +12,7 @@ pub use crate::common::{ConnectionError, RequestError, ServerError};
 use crate::connection::HttpConnection;
 use crate::request::Request;
 use crate::response::{Response, StatusCode};
-use vmm_sys_util::sock_ctrl_msg::ScmSocket;
-
-use vmm_sys_util::epoll;
+use vmm_sys_util::{epoll, eventfd::EventFd, sock_ctrl_msg::ScmSocket};
 
 static SERVER_FULL_ERROR_MESSAGE: &[u8] = b"HTTP/1.1 503\r\n\
                                             Server: Firecracker API\r\n\
@@ -27,6 +25,7 @@ pub(crate) const MAX_PAYLOAD_SIZE: usize = 51200;
 type Result<T> = std::result::Result<T, ServerError>;
 
 /// Wrapper over `Request` which adds an identification token.
+#[derive(Debug)]
 pub struct ServerRequest {
     /// Inner request.
     pub request: Request,
@@ -255,6 +254,9 @@ pub struct HttpServer {
     socket: UnixListener,
     /// Server's epoll instance.
     epoll: epoll::Epoll,
+    /// Event requesting micro-http shutdown.
+    /// Used to break out of inner `epoll_wait` and reports shutdown event.
+    kill_switch: Option<EventFd>,
     /// Holds the token-connection pairs of the server.
     /// Each connection has an associated identification token, which is
     /// the file descriptor of the underlying stream.
@@ -278,6 +280,7 @@ impl HttpServer {
         Ok(Self {
             socket,
             epoll,
+            kill_switch: None,
             connections: HashMap::new(),
             payload_max_size: MAX_PAYLOAD_SIZE,
         })
@@ -300,9 +303,19 @@ impl HttpServer {
         Ok(HttpServer {
             socket,
             epoll,
+            kill_switch: None,
             connections: HashMap::new(),
             payload_max_size: MAX_PAYLOAD_SIZE,
         })
+    }
+
+    /// Adds a `kill_switch` event fd used to break out of inner `epoll_wait`
+    /// and report a shutdown event.
+    pub fn add_kill_switch(&mut self, kill_switch: EventFd) -> Result<()> {
+        // Add the kill switch to the `epoll` structure.
+        let ret = Self::epoll_add(&self.epoll, kill_switch.as_raw_fd());
+        self.kill_switch = Some(kill_switch);
+        ret
     }
 
     /// This function sets the limit for PUT/PATCH requests. It overwrites the
@@ -337,25 +350,33 @@ impl HttpServer {
     /// on a connection on which it is not possible.
     pub fn requests(&mut self) -> Result<Vec<ServerRequest>> {
         let mut parsed_requests: Vec<ServerRequest> = vec![];
-        let mut events = vec![epoll::EpollEvent::default(); MAX_CONNECTIONS];
+        // Possible events coming from FDs: 1 + 1 + MAX_CONNECTIONS:
+        // exit-eventfd, sock-listen-fd, active-connections-fds.
+        let mut events = [epoll::EpollEvent::default(); MAX_CONNECTIONS + 2];
         // This is a wrapper over the syscall `epoll_wait` and it will block the
         // current thread until at least one event is received.
         // The received notifications will then populate the `events` array with
-        // `event_count` elements, where 1 <= event_count <= MAX_CONNECTIONS.
+        // `event_count` elements, where 1 <= event_count <= MAX_CONNECTIONS + 2.
         let event_count = match self.epoll.wait(-1, &mut events[..]) {
             Ok(event_count) => event_count,
             Err(e) if e.raw_os_error() == Some(libc::EINTR) => 0,
             Err(e) => return Err(ServerError::IOError(e)),
         };
-        // We use `take()` on the iterator over `events` as, even though only
-        // `events_count` events have been inserted into `events`, the size of
-        // the array is still `MAX_CONNECTIONS`, so we discard empty elements
+
+        // Getting the file descriptor for kill switch.
+        // If there is no kill switch fd, we use value -1 as an invalid fd.
+        let kill_fd = self.kill_switch.as_ref().map_or(-1, |ks| ks.as_raw_fd());
+
+        // We only iterate over first `event_count` events and discard empty elements
         // at the end of the array.
-        for e in events.iter().take(event_count) {
+        for e in events[..event_count].iter() {
             // Check the file descriptor which produced the notification `e`.
-            // It could be that we have a new connection, or one of our open
-            // connections is ready to exchange data with a client.
-            if e.fd() == self.socket.as_raw_fd() {
+            // It could be that we need to shutdown, or have a new connection, or
+            // one of our open connections is ready to exchange data with a client.
+            if e.fd() == kill_fd {
+                // Report that the kill switch was triggered.
+                return Err(ServerError::ShutdownEvent);
+            } else if e.fd() == self.socket.as_raw_fd() {
                 // We have received a notification on the listener socket, which
                 // means we have a new connection to accept.
                 match self.handle_new_connection() {
@@ -646,9 +667,10 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::Shutdown;
     use std::os::unix::net::UnixStream;
+    use std::sync::{Arc, Mutex};
 
     use crate::common::Body;
-    use vmm_sys_util::tempfile::TempFile;
+    use vmm_sys_util::{eventfd::EFD_NONBLOCK, tempfile::TempFile};
 
     fn get_temp_socket_file() -> TempFile {
         let mut path_to_socket = TempFile::new().unwrap();
@@ -1094,5 +1116,46 @@ mod tests {
         assert!(second_socket.read(&mut buf[..]).unwrap() > 0);
         second_socket.shutdown(std::net::Shutdown::Both).unwrap();
         assert!(server.requests().is_ok());
+    }
+
+    #[test]
+    fn test_kill_switch() {
+        let path_to_socket = get_temp_socket_file();
+
+        let mut server = HttpServer::new(path_to_socket.as_path()).unwrap();
+        let kill_switch = EventFd::new(EFD_NONBLOCK).unwrap();
+        server
+            .add_kill_switch(kill_switch.try_clone().unwrap())
+            .unwrap();
+        server.start_server().unwrap();
+
+        let request_result = Arc::new(Mutex::new(Ok(vec![])));
+        let res_clone = request_result.clone();
+        // Start a thread running the server, expect it to report shutdown event.
+        let handler = std::thread::spawn(move || {
+            *res_clone.lock().unwrap() = server.requests();
+        });
+
+        // Trigger kill switch.
+        kill_switch.write(1).unwrap();
+        // Then send request.
+        let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
+        socket
+            .write_all(
+                b"PATCH /machine-config HTTP/1.1\r\n\
+                         Content-Length: 13\r\n\
+                         Content-Type: application/json\r\n\r\nwhatever body",
+            )
+            .unwrap();
+        // Wait for server thread to handle events.
+        handler.join().unwrap();
+
+        // Expect shutdown event instead of http request event.
+        match &*request_result.lock().unwrap() {
+            Err(ServerError::ShutdownEvent) => (),
+            v => {
+                panic!("Expected shutdown event, instead got {:?}.", v)
+            }
+        };
     }
 }
