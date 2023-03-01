@@ -1151,11 +1151,11 @@ mod tests {
         handler.join().unwrap();
 
         // Expect shutdown event instead of http request event.
-        match &*request_result.lock().unwrap() {
-            Err(ServerError::ShutdownEvent) => (),
-            v => {
-                panic!("Expected shutdown event, instead got {:?}.", v)
-            }
-        };
+        let res = request_result.lock().unwrap();
+        assert_eq!(
+            res.as_ref().unwrap_err(),
+            &ServerError::ShutdownEvent,
+            "Expected shutdown event, instead got {res:?}"
+        );
     }
 }
