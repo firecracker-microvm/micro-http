@@ -170,10 +170,10 @@ pub enum ServerError {
     Overflow,
     /// Server maximum capacity has been reached.
     ServerFull,
-    /// Underflow occurred while processing messages.
-    Underflow,
     /// Shutdown requested.
     ShutdownEvent,
+    /// Underflow occurred while processing messages.
+    Underflow,
 }
 
 impl Display for ServerError {
@@ -343,6 +343,23 @@ mod tests {
                     format!("{}", e).eq(&format!("{}", other_e))
                 }
                 (InvalidWrite, InvalidWrite) => true,
+                _ => false,
+            }
+        }
+    }
+
+    impl PartialEq for ServerError {
+        fn eq(&self, other: &Self) -> bool {
+            use self::ServerError::*;
+            match (self, other) {
+                (ConnectionError(ref e), ConnectionError(ref other_e)) => e.eq(other_e),
+                (IOError(ref e), IOError(ref other_e)) => {
+                    e.raw_os_error() == other_e.raw_os_error()
+                }
+                (Overflow, Overflow) => true,
+                (ServerFull, ServerFull) => true,
+                (ShutdownEvent, ShutdownEvent) => true,
+                (Underflow, Underflow) => true,
                 _ => false,
             }
         }
