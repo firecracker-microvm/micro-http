@@ -59,6 +59,7 @@ impl ServerRequest {
 }
 
 /// Wrapper over `Response` which adds an identification token.
+#[derive(Debug)]
 pub struct ServerResponse {
     /// Inner response.
     response: Response,
@@ -74,7 +75,7 @@ impl ServerResponse {
 
 /// Describes the state of the connection as far as data exchange
 /// on the stream is concerned.
-#[derive(PartialOrd, PartialEq)]
+#[derive(Debug, PartialOrd, PartialEq)]
 enum ClientConnectionState {
     AwaitingIncoming,
     AwaitingOutgoing,
@@ -83,6 +84,7 @@ enum ClientConnectionState {
 
 /// Wrapper over `HttpConnection` which keeps track of yielded
 /// requests and absorbed responses.
+#[derive(Debug)]
 struct ClientConnection<T> {
     /// The `HttpConnection` object which handles data exchange.
     connection: HttpConnection<T>,
@@ -249,6 +251,7 @@ impl<T: Read + Write + ScmSocket> ClientConnection<T> {
 ///     break;
 /// }
 /// ```
+#[derive(Debug)]
 pub struct HttpServer {
     /// Socket on which we listen for new connections.
     socket: UnixListener,

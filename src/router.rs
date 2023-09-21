@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::hash_map::{Entry, HashMap};
+use std::fmt;
 
 use crate::{MediaType, Method, Request, Response, StatusCode, Version};
 
@@ -22,6 +23,17 @@ pub struct HttpRoutes<T> {
     media_type: MediaType,
     /// routes is a hash table mapping endpoint URIs to their endpoint handlers.
     routes: HashMap<String, Box<dyn EndpointHandler<T> + Sync + Send>>,
+}
+
+impl<T> fmt::Debug for HttpRoutes<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HttpRoutes")
+            .field("server_id", &self.server_id)
+            .field("prefix", &self.prefix)
+            .field("media_type", &self.media_type)
+            .field("routes", &"{ .. }")
+            .finish()
+    }
 }
 
 impl<T: Send> HttpRoutes<T> {

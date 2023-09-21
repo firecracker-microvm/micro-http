@@ -19,6 +19,7 @@ const BUFFER_SIZE: usize = 1024;
 const SCM_MAX_FD: usize = 253;
 
 /// Describes the state machine of an HTTP connection.
+#[derive(Debug)]
 enum ConnectionState {
     WaitingForRequestLine,
     WaitingForHeaders,
@@ -27,6 +28,7 @@ enum ConnectionState {
 }
 
 /// A wrapper over a HTTP Connection.
+#[derive(Debug)]
 pub struct HttpConnection<T> {
     /// A partial request that is still being received.
     pending_request: Option<Request>,
