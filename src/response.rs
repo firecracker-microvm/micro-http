@@ -86,7 +86,7 @@ impl StatusLine {
 /// The content type can be updated with a call to `set_content_type`.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ResponseHeaders {
-    content_length: i32,
+    content_length: Option<i32>,
     content_type: MediaType,
     deprecation: bool,
     server: String,
@@ -151,7 +151,7 @@ impl ResponseHeaders {
         self.write_allow_header(buf)?;
         self.write_deprecation_header(buf)?;
 
-        if self.content_length != 0 {
+        if let Some(content_length) = self.content_length {
             buf.write_all(Header::ContentType.raw())?;
             buf.write_all(&[COLON, SP])?;
             buf.write_all(self.content_type.as_str().as_bytes())?;
@@ -159,7 +159,7 @@ impl ResponseHeaders {
 
             buf.write_all(Header::ContentLength.raw())?;
             buf.write_all(&[COLON, SP])?;
-            buf.write_all(self.content_length.to_string().as_bytes())?;
+            buf.write_all(content_length.to_string().as_bytes())?;
             buf.write_all(&[CR, LF])?;
 
             if self.accept_encoding {
@@ -173,8 +173,8 @@ impl ResponseHeaders {
         buf.write_all(&[CR, LF])
     }
 
-    // Sets the content length to be written in the HTTP response.
-    fn set_content_length(&mut self, content_length: i32) {
+    /// Sets the content length to be written in the HTTP response.
+    pub fn set_content_length(&mut self, content_length: Option<i32>) {
         self.content_length = content_length;
     }
 
@@ -217,10 +217,39 @@ pub struct Response {
 
 impl Response {
     /// Creates a new HTTP `Response` with an empty body.
+    ///
+    /// Although there are several cases where Content-Length field must not
+    /// be sent, micro-http omits Content-Length field when the response
+    /// status code is 1XX or 204. If needed, users can remove it by calling
+    /// `set_content_length(None)`.
+    ///
+    /// https://datatracker.ietf.org/doc/html/rfc9110#name-content-length
+    /// > A server MAY send a Content-Length header field in a response to a
+    /// > HEAD request (Section 9.3.2); a server MUST NOT send Content-Length
+    /// > in such a response unless its field value equals the decimal number
+    /// > of octets that would have been sent in the content of a response if
+    /// > the same request had used the GET method.
+    /// >
+    /// > A server MAY send a Content-Length header field in a 304 (Not
+    /// > Modified) response to a conditional GET request (Section 15.4.5); a
+    /// > server MUST NOT send Content-Length in such a response unless its
+    /// > field value equals the decimal number of octets that would have been
+    /// > sent in the content of a 200 (OK) response to the same request.
+    /// >
+    /// > A server MUST NOT send a Content-Length header field in any response
+    /// > with a status code of 1xx (Informational) or 204 (No Content). A
+    /// > server MUST NOT send a Content-Length header field in any 2xx
+    /// > (Successful) response to a CONNECT request (Section 9.3.6).
     pub fn new(http_version: Version, status_code: StatusCode) -> Self {
         Self {
             status_line: StatusLine::new(http_version, status_code),
-            headers: ResponseHeaders::default(),
+            headers: ResponseHeaders {
+                content_length: match status_code {
+                    StatusCode::Continue | StatusCode::NoContent => None,
+                    _ => Some(0),
+                },
+                ..Default::default()
+            },
             body: Default::default(),
         }
     }
@@ -230,8 +259,16 @@ impl Response {
     /// This function has side effects because it also updates the headers:
     /// - `ContentLength`: this is set to the length of the specified body.
     pub fn set_body(&mut self, body: Body) {
-        self.headers.set_content_length(body.len() as i32);
+        self.headers.set_content_length(Some(body.len() as i32));
         self.body = Some(body);
+    }
+
+    /// Updates the content length of the `Response`.
+    ///
+    /// It is recommended to use this method only when removing Content-Length
+    /// field if the response status is not 1XX or 204.
+    pub fn set_content_length(&mut self, content_length: Option<i32>) {
+        self.headers.set_content_length(content_length);
     }
 
     /// Updates the content type of the `Response`.
@@ -296,7 +333,7 @@ impl Response {
 
     /// Returns the Content Length of the response.
     pub fn content_length(&self) -> i32 {
-        self.headers.content_length
+        self.headers.content_length.unwrap_or(0)
     }
 
     /// Returns the Content Type of the response.
@@ -359,8 +396,10 @@ mod tests {
         let expected_response: &'static [u8] = b"HTTP/1.0 200 \r\n\
             Server: Firecracker API\r\n\
             Connection: keep-alive\r\n\
-            Allow: GET, PATCH, PUT\r\n\r\n";
-        let mut response_buf: [u8; 90] = [0; 90];
+            Allow: GET, PATCH, PUT\r\n\
+            Content-Type: application/json\r\n\
+            Content-Length: 0\r\n\r\n";
+        let mut response_buf: [u8; 141] = [0; 141];
         assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
         assert_eq!(response_buf.as_ref(), expected_response);
 
@@ -479,5 +518,36 @@ mod tests {
         let response = Response::new(Version::Http10, StatusCode::OK);
         let another_response = Response::new(Version::Http10, StatusCode::BadRequest);
         assert_ne!(response, another_response);
+    }
+
+    #[test]
+    fn test_content_length() {
+        // If the status code is 1XX or 204, Content-Length field must not exist.
+        let response = Response::new(Version::Http10, StatusCode::Continue);
+        let expected_response: &'static [u8] = b"HTTP/1.0 100 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\r\n";
+        let mut response_buf: [u8; 66] = [0; 66];
+        assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
+        assert_eq!(response_buf.as_ref(), expected_response);
+
+        let response = Response::new(Version::Http10, StatusCode::NoContent);
+        let expected_response: &'static [u8] = b"HTTP/1.0 204 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\r\n";
+        let mut response_buf: [u8; 66] = [0; 66];
+        assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
+        assert_eq!(response_buf.as_ref(), expected_response);
+
+        // If not 1XX or 204, Content-Length field must exist even if the body isn't set.
+        let response = Response::new(Version::Http10, StatusCode::OK);
+        let expected_response: &'static [u8] = b"HTTP/1.0 200 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\
+            Content-Type: application/json\r\n\
+            Content-Length: 0\r\n\r\n";
+        let mut response_buf: [u8; 117] = [0; 117];
+        assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
+        assert_eq!(response_buf.as_ref(), expected_response);
     }
 }
