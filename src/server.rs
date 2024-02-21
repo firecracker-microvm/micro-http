@@ -8,7 +8,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
 use crate::common::{Body, Version};
-pub use crate::common::{ConnectionError, RequestError, ServerError};
+pub use crate::common::{ConnectionError, ServerError};
 use crate::connection::HttpConnection;
 use crate::request::Request;
 use crate::response::{Response, StatusCode};
@@ -972,7 +972,7 @@ mod tests {
         assert_eq!(server.connections.len(), 10);
 
         // Check that the server detects a connection shutdown.
-        let sock: &UnixStream = sockets.get(0).unwrap();
+        let sock: &UnixStream = sockets.first().unwrap();
         sock.shutdown(Shutdown::Both).unwrap();
         assert!(server.requests().unwrap().is_empty());
         // Server should drop a closed connection.
