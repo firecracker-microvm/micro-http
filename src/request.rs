@@ -5,7 +5,7 @@ use std::fs::File;
 use std::str::from_utf8;
 
 use crate::common::ascii::{CR, CRLF_LEN, LF, SP};
-pub use crate::common::HttpHeaderError;
+
 pub use crate::common::RequestError;
 use crate::common::{Body, Method, Version};
 use crate::headers::Headers;
@@ -549,7 +549,7 @@ mod tests {
         let request = Request::try_from(request_bytes, None);
         assert_eq!(
             request.unwrap_err(),
-            RequestError::HeaderError(HttpHeaderError::InvalidValue(
+            RequestError::HeaderError(crate::HttpHeaderError::InvalidValue(
                 "Accept-Encoding".to_string(),
                 "identity;q=0".to_string()
             ))
