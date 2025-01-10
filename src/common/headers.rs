@@ -435,6 +435,7 @@ mod tests {
     use std::collections::HashMap;
 
     impl Headers {
+        #[allow(missing_docs)]
         pub fn new(content_length: u32, expect: bool, chunked: bool) -> Self {
             Self {
                 content_length,
