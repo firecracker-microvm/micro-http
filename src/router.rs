@@ -106,7 +106,7 @@ impl<T: Send> HttpRoutes<T> {
 mod tests {
     use super::*;
 
-    struct HandlerArg(bool);
+    struct HandlerArg;
 
     struct MockHandler {}
 
@@ -149,7 +149,7 @@ mod tests {
 
         let request =
             Request::try_from(b"GET http://localhost/api/v1/func2 HTTP/1.1\r\n\r\n", None).unwrap();
-        let arg = HandlerArg(true);
+        let arg = HandlerArg;
         let reply = router.handle_http_request(&request, &arg);
         assert_eq!(reply.status(), StatusCode::NotFound);
     }
