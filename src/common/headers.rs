@@ -431,6 +431,7 @@ impl MediaType {
 
 #[cfg(test)]
 mod tests {
+    #![allow(missing_docs)]
     use super::*;
     use std::collections::HashMap;
 
