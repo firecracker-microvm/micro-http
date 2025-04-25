@@ -30,6 +30,8 @@ pub enum StatusCode {
     MethodNotAllowed,
     /// 413, Payload Too Large
     PayloadTooLarge,
+    /// 429, Too Many Requests
+    TooManyRequests,
     /// 500, Internal Server Error
     InternalServerError,
     /// 501, Not Implemented
@@ -50,6 +52,7 @@ impl StatusCode {
             Self::NotFound => b"404",
             Self::MethodNotAllowed => b"405",
             Self::PayloadTooLarge => b"413",
+            Self::TooManyRequests => b"429",
             Self::InternalServerError => b"500",
             Self::NotImplemented => b"501",
             Self::ServiceUnavailable => b"503",
@@ -448,6 +451,7 @@ mod tests {
         assert_eq!(StatusCode::NotFound.raw(), b"404");
         assert_eq!(StatusCode::MethodNotAllowed.raw(), b"405");
         assert_eq!(StatusCode::PayloadTooLarge.raw(), b"413");
+        assert_eq!(StatusCode::TooManyRequests.raw(), b"429");
         assert_eq!(StatusCode::InternalServerError.raw(), b"500");
         assert_eq!(StatusCode::NotImplemented.raw(), b"501");
         assert_eq!(StatusCode::ServiceUnavailable.raw(), b"503");
