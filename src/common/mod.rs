@@ -23,6 +23,8 @@ pub enum HttpHeaderError {
     InvalidUtf8String(Utf8Error),
     ///The value specified is not valid.
     InvalidValue(String, String),
+    /// Non-ASCII character found.
+    NonAsciiCharacter(String, String),
     /// The content length specified is longer than the limit imposed by Micro Http.
     SizeLimitExceeded(String),
     /// The requested feature is not currently supported.
@@ -44,6 +46,13 @@ impl Display for HttpHeaderError {
             }
             Self::InvalidValue(header_name, value) => {
                 write!(f, "Invalid value. Key:{}; Value:{}", header_name, value)
+            }
+            Self::NonAsciiCharacter(header_name, value) => {
+                write!(
+                    f,
+                    "Non-ASCII character found. Key: {}; Value: {}",
+                    header_name, value
+                )
             }
             Self::SizeLimitExceeded(inner) => {
                 write!(f, "Invalid content length. Header: {}", inner)

@@ -1,11 +1,13 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::io::{Error as WriteError, Write};
 
 use crate::ascii::{COLON, CR, LF, SP};
 use crate::common::{Body, Version};
 use crate::headers::{Header, MediaType};
+use crate::HttpHeaderError;
 use crate::Method;
 
 /// Wrapper over a response status code.
@@ -95,6 +97,7 @@ pub struct ResponseHeaders {
     server: String,
     allow: Vec<Method>,
     accept_encoding: bool,
+    custom_headers: HashMap<String, String>,
 }
 
 impl Default for ResponseHeaders {
@@ -106,6 +109,7 @@ impl Default for ResponseHeaders {
             server: String::from("Firecracker API"),
             allow: Vec::new(),
             accept_encoding: false,
+            custom_headers: HashMap::default(),
         }
     }
 }
@@ -141,6 +145,18 @@ impl ResponseHeaders {
         buf.write_all(&[CR, LF])
     }
 
+    // The logic pertaining to custom headers writing.
+    fn write_custom_headers<T: Write>(&self, buf: &mut T) -> Result<(), WriteError> {
+        // Note that all the custom headers have already been validated as US-ASCII.
+        for (header, value) in &self.custom_headers {
+            buf.write_all(header.as_bytes())?;
+            buf.write_all(&[COLON, SP])?;
+            buf.write_all(value.as_bytes())?;
+            buf.write_all(&[CR, LF])?;
+        }
+        Ok(())
+    }
+
     /// Writes the headers to `buf` using the HTTP specification.
     pub fn write_all<T: Write>(&self, buf: &mut T) -> Result<(), WriteError> {
         buf.write_all(Header::Server.raw())?;
@@ -153,6 +169,7 @@ impl ResponseHeaders {
 
         self.write_allow_header(buf)?;
         self.write_deprecation_header(buf)?;
+        self.write_custom_headers(buf)?;
 
         if let Some(content_length) = self.content_length {
             buf.write_all(Header::ContentType.raw())?;
@@ -202,6 +219,26 @@ impl ResponseHeaders {
     #[allow(unused)]
     pub fn set_encoding(&mut self) {
         self.accept_encoding = true;
+    }
+
+    /// Sets custom headers to be written in the HTTP response.
+    pub fn set_custom_headers(
+        &mut self,
+        custom_headers: &HashMap<String, String>,
+    ) -> Result<(), HttpHeaderError> {
+        // https://datatracker.ietf.org/doc/html/rfc7230
+        // HTTP headers MUST be US-ASCII.
+        if let Some((k, v)) = custom_headers
+            .iter()
+            .find(|(k, v)| !k.is_ascii() || !v.is_ascii())
+        {
+            return Err(HttpHeaderError::NonAsciiCharacter(
+                k.to_owned(),
+                v.to_owned(),
+            ));
+        }
+        self.custom_headers = custom_headers.to_owned();
+        Ok(())
     }
 }
 
@@ -292,6 +329,19 @@ impl Response {
     /// Sets the HTTP response server.
     pub fn set_server(&mut self, server: &str) {
         self.headers.set_server(server);
+    }
+
+    /// Sets the custom headers.
+    pub fn set_custom_headers(
+        &mut self,
+        custom_headers: &HashMap<String, String>,
+    ) -> Result<(), HttpHeaderError> {
+        self.headers.set_custom_headers(custom_headers)
+    }
+
+    /// Gets a reference to the custom headers.
+    pub fn custom_headers(&self) -> &HashMap<String, String> {
+        &self.headers.custom_headers
     }
 
     /// Sets the HTTP allowed methods.
@@ -553,5 +603,30 @@ mod tests {
         let mut response_buf: [u8; 117] = [0; 117];
         assert!(response.write_all(&mut response_buf.as_mut()).is_ok());
         assert_eq!(response_buf.as_ref(), expected_response);
+    }
+
+    #[test]
+    fn test_custom_headers() {
+        // Valid custom headers.
+        let mut response = Response::new(Version::Http10, StatusCode::OK);
+        let custom_headers = [("Foo".into(), "Bar".into())].into();
+        response.set_custom_headers(&custom_headers).unwrap();
+        let expected_response = b"HTTP/1.0 200 \r\n\
+            Server: Firecracker API\r\n\
+            Connection: keep-alive\r\n\
+            Foo: Bar\r\n\
+            Content-Type: application/json\r\n\
+            Content-Length: 0\r\n\r\n";
+        let mut response_buf: [u8; 127] = [0; 127];
+        response.write_all(&mut response_buf.as_mut()).unwrap();
+        assert_eq!(response_buf.as_ref(), expected_response);
+
+        // Should fail to set custom headers including non-ASCII character.
+        let mut response = Response::new(Version::Http10, StatusCode::OK);
+        let custom_headers = [("Greek capital delta".into(), "Δ".into())].into();
+        assert_eq!(
+            response.set_custom_headers(&custom_headers).unwrap_err(),
+            HttpHeaderError::NonAsciiCharacter("Greek capital delta".into(), "Δ".into())
+        );
     }
 }
