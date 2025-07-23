@@ -2,10 +2,11 @@
 
 ## Added
 
-- Implemented `Eq` for `common::headers::Encoding`, `common::headers::MediaType`, 
+- Implemented `Eq` for `common::headers::Encoding`, `common::headers::MediaType`,
   `common::headers::Headers`, `common::HttpHeaderError`, `common::Body`, `common::Version`,
   `common::RequestError`, `request::Uri`, `request::RequestLine`, `response::StatusCode`,
   `response::ResponseHeaders`
+- Allowed to set custom headers in HTTP responses.
 
 ## Changed
 
