@@ -251,8 +251,8 @@ impl Headers {
 
     /// Parses a byte slice into a Headers structure for a HTTP request.
     ///
-    /// The byte slice is expected to have the following format: </br>
-    ///     * Request Header Lines "<header_line> CRLF"- Optional </br>
+    /// The byte slice is expected to have the following format: <br/>
+    ///     * Request Header Lines "<header_line> CRLF"- Optional <br/>
     /// There can be any number of request headers, including none, followed by
     /// an extra sequence of Carriage Return and Line Feed.
     /// All header fields are parsed. However, only the ones present in the
