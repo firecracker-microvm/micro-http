@@ -209,7 +209,7 @@ impl ResponseHeaders {
     }
 
     /// Sets the `Deprecation` header to be written in the HTTP response.
-    /// https://tools.ietf.org/id/draft-dalal-deprecation-header-03.html
+    /// <https://tools.ietf.org/id/draft-dalal-deprecation-header-03.html>
     #[allow(unused)]
     pub fn set_deprecation(&mut self) {
         self.deprecation = true;
@@ -263,7 +263,7 @@ impl Response {
     /// status code is 1XX or 204. If needed, users can remove it by calling
     /// `set_content_length(None)`.
     ///
-    /// https://datatracker.ietf.org/doc/html/rfc9110#name-content-length
+    /// <https://datatracker.ietf.org/doc/html/rfc9110#name-content-length>
     /// > A server MAY send a Content-Length header field in a response to a
     /// > HEAD request (Section 9.3.2); a server MUST NOT send Content-Length
     /// > in such a response unless its field value equals the decimal number

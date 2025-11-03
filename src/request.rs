@@ -166,11 +166,11 @@ pub struct Request {
 impl Request {
     /// Parses a byte slice into a HTTP Request.
     ///
-    /// The byte slice is expected to have the following format: </br>
-    ///     * Request Line: "GET SP Request-uri SP HTTP/1.0 CRLF" - Mandatory </br>
-    ///     * Request Headers "<headers> CRLF"- Optional </br>
-    ///     * Empty Line "CRLF" </br>
-    ///     * Entity Body - Optional </br>
+    /// The byte slice is expected to have the following format: <br/>
+    ///     * Request Line: "GET SP Request-uri SP HTTP/1.0 CRLF" - Mandatory <br/>
+    ///     * Request Headers "`<headers>` CRLF"- Optional <br/>
+    ///     * Empty Line "CRLF" <br/>
+    ///     * Entity Body - Optional <br/>
     /// The request headers and the entity body are not parsed and None is returned because
     /// these are not used by the MMDS server.
     /// The only supported method is GET and the HTTP protocol is expected to be HTTP/1.0
