@@ -95,7 +95,7 @@ pub struct RequestLine {
 impl RequestLine {
     fn parse_request_line(
         request_line: &[u8],
-    ) -> std::result::Result<RequestLineParts, RequestError> {
+    ) -> std::result::Result<RequestLineParts<'_>, RequestError> {
         if let Some(method_end) = find(request_line, &[SP]) {
             // The slice access is safe because `find` validates that `method_end` < `request_line` size.
             let method = &request_line[..method_end];
