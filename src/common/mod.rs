@@ -343,12 +343,12 @@ mod tests {
         fn eq(&self, other: &Self) -> bool {
             use self::ConnectionError::*;
             match (self, other) {
-                (ParseError(ref e), ParseError(ref other_e)) => e.eq(other_e),
+                (ParseError(e), ParseError(other_e)) => e.eq(other_e),
                 (ConnectionClosed, ConnectionClosed) => true,
-                (StreamReadError(ref e), StreamReadError(ref other_e)) => {
+                (StreamReadError(e), StreamReadError(other_e)) => {
                     format!("{}", e).eq(&format!("{}", other_e))
                 }
-                (StreamWriteError(ref e), StreamWriteError(ref other_e)) => {
+                (StreamWriteError(e), StreamWriteError(other_e)) => {
                     format!("{}", e).eq(&format!("{}", other_e))
                 }
                 (InvalidWrite, InvalidWrite) => true,
@@ -361,8 +361,8 @@ mod tests {
         fn eq(&self, other: &Self) -> bool {
             use self::ServerError::*;
             match (self, other) {
-                (ConnectionError(ref e), ConnectionError(ref other_e)) => e.eq(other_e),
-                (IOError(ref e), IOError(ref other_e)) => {
+                (ConnectionError(e), ConnectionError(other_e)) => e.eq(other_e),
+                (IOError(e), IOError(other_e)) => {
                     e.raw_os_error() == other_e.raw_os_error()
                 }
                 (Overflow, Overflow) => true,
