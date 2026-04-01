@@ -249,7 +249,9 @@ impl Request {
                         None
                     }
                     content_length => {
-                        if request_line.method == Method::Get {
+                        if request_line.method == Method::Get
+                            || request_line.method == Method::Delete
+                        {
                             return Err(RequestError::InvalidRequest);
                         }
                         // Multiplication is safe because `CRLF_LEN` is a small constant.
@@ -476,6 +478,15 @@ mod tests {
 
         // Test for invalid Request (`GET` requests should have no body).
         let request_bytes = b"GET /machine-config HTTP/1.1\r\n\
+                                        Content-Length: 13\r\n\
+                                        Content-Type: application/json\r\n\r\nwhatever body";
+        assert_eq!(
+            Request::try_from(request_bytes, None).unwrap_err(),
+            RequestError::InvalidRequest
+        );
+
+        // Test for invalid Request (`DELETE` requests should have no body).
+        let request_bytes = b"DELETE /machine-config HTTP/1.1\r\n\
                                         Content-Length: 13\r\n\
                                         Content-Type: application/json\r\n\r\nwhatever body";
         assert_eq!(
