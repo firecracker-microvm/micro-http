@@ -298,7 +298,8 @@ impl HttpServer {
     /// # Errors
     /// Returns an `IOError` when `epoll::create` fails.
     pub unsafe fn new_from_fd(socket_fd: RawFd) -> Result<Self> {
-        let socket = UnixListener::from_raw_fd(socket_fd);
+        // Safety: see the safety contract of this function.
+        let socket = unsafe { UnixListener::from_raw_fd(socket_fd) };
         let epoll = epoll::Epoll::new().map_err(ServerError::IOError)?;
         Ok(HttpServer {
             socket,
