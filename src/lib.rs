@@ -83,7 +83,7 @@
 //! ```
 //! use micro_http::{HttpServer, Response, StatusCode};
 //!
-//! let path_to_socket = "/tmp/example.sock";
+//! let path_to_socket = "/tmp/example_lib.sock";
 //! std::fs::remove_file(path_to_socket).unwrap_or_default();
 //!
 //! // Start the server.
