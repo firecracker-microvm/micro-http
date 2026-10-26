@@ -1132,23 +1132,23 @@ mod tests {
         let request_result = Arc::new(Mutex::new(Ok(vec![])));
         let res_clone = request_result.clone();
         // Start a thread running the server, expect it to report shutdown event.
-        let handler = std::thread::spawn(move || {
-            *res_clone.lock().unwrap() = server.requests();
-        });
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                *res_clone.lock().unwrap() = server.requests();
+            });
 
-        // Trigger kill switch.
-        kill_switch.write(1).unwrap();
-        // Then send request.
-        let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
-        socket
-            .write_all(
-                b"PATCH /machine-config HTTP/1.1\r\n\
-                         Content-Length: 13\r\n\
-                         Content-Type: application/json\r\n\r\nwhatever body",
-            )
-            .unwrap();
-        // Wait for server thread to handle events.
-        handler.join().unwrap();
+            // Trigger kill switch.
+            kill_switch.write(1).unwrap();
+            // Then send request.
+            let mut socket = UnixStream::connect(path_to_socket.as_path()).unwrap();
+            socket
+                .write_all(
+                    b"PATCH /machine-config HTTP/1.1\r\n\
+                             Content-Length: 13\r\n\
+                             Content-Type: application/json\r\n\r\nwhatever body",
+                )
+                .unwrap();
+        });
 
         // Expect shutdown event instead of http request event.
         let res = request_result.lock().unwrap();
